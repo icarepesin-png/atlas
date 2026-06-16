@@ -1,0 +1,55 @@
+services:
+  api:
+    build: .
+    ports: ["8000:8000"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg2://atlas:atlas@db:5432/atlas
+    depends_on: [db, redis]
+    volumes:
+      - ./data:/app/data
+
+  dashboard:
+    build: .
+    command: streamlit run atlas/dashboard/app.py --server.port 8501 --server.address 0.0.0.0
+    ports: ["8501:8501"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg2://atlas:atlas@db:5432/atlas
+    depends_on: [db]
+    volumes:
+      - ./data:/app/data
+
+  scheduler:
+    build: .
+    # Scan quotidien apres la cloture US (22h30 Paris). En production,
+    # remplacer par Airflow/Prefect ou un cron systemd.
+    command: >
+      sh -c "while true; do
+               python -m atlas.pipelines.daily_scan;
+               sleep 86400;
+             done"
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg2://atlas:atlas@db:5432/atlas
+    depends_on: [db]
+    volumes:
+      - ./data:/app/data
+
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: atlas
+      POSTGRES_PASSWORD: atlas
+      POSTGRES_DB: atlas
+    ports: ["5432:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+
+  redis:
+    image: redis:7
+    ports: ["6379:6379"]
+
+volumes:
+  pgdata:

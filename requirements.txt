@@ -1,0 +1,30 @@
+# Core
+pandas>=2.1
+numpy>=1.26
+scipy>=1.11
+pyyaml>=6.0
+pydantic>=2.5
+pydantic-settings>=2.1
+python-dotenv>=1.0
+
+# Data providers
+yfinance>=0.2.40
+fredapi>=0.5.1
+requests>=2.31
+lxml>=5.1
+
+# Storage
+pyarrow>=15.0
+SQLAlchemy>=2.0
+psycopg2-binary>=2.9   # base cloud Postgres (dashboard heberge)
+
+# API
+fastapi>=0.110
+uvicorn[standard]>=0.27
+
+# Dashboard
+streamlit>=1.32
+plotly>=5.18
+
+# Tests
+pytest>=8.0
