@@ -20,10 +20,22 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from datetime import datetime
 
+import os
+
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+
+# Hebergement cloud (Streamlit Community Cloud): l'URL de la base Postgres est
+# fournie via les "secrets" Streamlit. On la bascule en variable d'environnement
+# pour que la config ATLAS la lise, avant tout acces a la base.
+try:
+    for _key in ("DATABASE_URL",):
+        if _key in st.secrets:
+            os.environ[_key] = str(st.secrets[_key])
+except Exception:
+    pass
 
 from atlas.data.store import load_ohlcv, read_table_raw
 
