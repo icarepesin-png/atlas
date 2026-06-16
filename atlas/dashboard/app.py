@@ -30,13 +30,16 @@ import streamlit as st
 # Hebergement cloud (Streamlit Community Cloud): l'URL de la base Postgres est
 # fournie via les "secrets" Streamlit. On la bascule en variable d'environnement
 # pour que la config ATLAS la lise, avant tout acces a la base.
+_secret_seen = False
 try:
-    for _key in ("DATABASE_URL",):
-        if _key in st.secrets:
-            os.environ[_key] = str(st.secrets[_key])
+    if "DATABASE_URL" in st.secrets:
+        os.environ["DATABASE_URL"] = str(st.secrets["DATABASE_URL"])
+        _secret_seen = True
 except Exception:
     pass
 
+from atlas.config import get_settings
+get_settings.cache_clear()  # relire DATABASE_URL apres l'avoir positionne
 from atlas.data.store import load_ohlcv, read_table_raw
 
 try:
@@ -139,6 +142,22 @@ def _health_banner():
 
 
 _health_banner()
+
+
+# --- Diagnostic connexion base (temporaire, repliable) ---------------------
+with st.expander("Diagnostic connexion (cliquer pour ouvrir)"):
+    _db = get_settings().database_url
+    st.write("Secret DATABASE_URL detecte :", _secret_seen)
+    st.write("Type de base utilise :",
+             "PostgreSQL (cloud)" if _db.startswith("postgres") else "SQLite (local)")
+    try:
+        from sqlalchemy import text as _text
+        from atlas.data.store import get_engine as _ge
+        with _ge().connect() as _c:
+            _n = _c.execute(_text("SELECT COUNT(*) FROM scores")).scalar()
+        st.write("Lignes 'scores' lues :", _n)
+    except Exception as _e:
+        st.write("Erreur de connexion :", str(_e)[:400])
 
 
 @st.cache_data(ttl=300)
