@@ -5,6 +5,7 @@ __pycache__/
 *.egg-info/
 .env
 atlas.db
-# Tout le dossier data/ reste local (cache prix, sauvegardes, logs, health).
+# Le dossier data/ A LA RACINE reste local (cache prix, sauvegardes, logs).
+# Le slash initial l'ancre a la racine: n'exclut PAS le package atlas/data/.
 # Les noms de societes vivent dans config/ (versionne) pour le dashboard cloud.
-data/
+/data/
