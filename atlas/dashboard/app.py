@@ -256,6 +256,11 @@ with tab_watch:
         view = latest_scores[latest_scores["composite"] >= min_score].copy()
         names = company_names(tuple(view["ticker"]))
         view.insert(1, "societe", view["ticker"].map(names))
+        # Remplacer les valeurs manquantes (sinon le tableau affiche "undefined")
+        view["societe"] = view["societe"].fillna(view["ticker"])
+        for _c in ("sector_name", "country"):
+            if _c in view.columns:
+                view[_c] = view[_c].fillna("n/d")
         st.dataframe(
             view.sort_values("composite", ascending=False)[
                 ["ticker", "societe", "composite", "fundamental", "technical",
@@ -352,6 +357,11 @@ with tab_pf:
             value = qty * last_usd                    # valeur actuelle en USD
             mkt_value += value
             pnl = (last_usd - entry_usd) * qty
+            # PnL assure: gain verrouille si le stop effectif (stop ou trailing,
+            # le plus haut) est passe AU-DESSUS du prix d'entree. Sinon vide.
+            eff_stop_usd = max(float(p.get("stop") or 0),
+                               float(p.get("trailing_stop") or 0)) * fx
+            secured = (eff_stop_usd - entry_usd) * qty
             rows.append({
                 "Titre": p["ticker"], "Societe": names.get(p["ticker"], p["ticker"]),
                 "Qte": qty,
@@ -359,6 +369,7 @@ with tab_pf:
                 "Cours actuel (USD)": round(last_usd, 2),
                 "Valeur (USD)": round(value, 2),
                 "P&L latent (USD)": round(pnl, 2),
+                "PnL assure (USD)": round(secured, 2) if eff_stop_usd > entry_usd else None,
                 "P&L %": round((last_usd / entry_usd - 1) * 100, 2) if entry_usd else 0.0,
             })
         live_equity = cash + mkt_value
@@ -377,7 +388,7 @@ with tab_pf:
         c4.metric("Marche US", "ouvert" if is_open else "ferme")
         col_order = ["Titre", "Societe", "Qte", "Prix entree (USD)",
                      "Cours actuel (USD)", "Valeur (USD)", "Poids %",
-                     "P&L latent (USD)", "P&L %"]
+                     "P&L latent (USD)", "PnL assure (USD)", "P&L %"]
         st.dataframe(
             pd.DataFrame(rows)[col_order], use_container_width=True, hide_index=True,
             column_config={
@@ -387,9 +398,21 @@ with tab_pf:
                 "Poids %": st.column_config.ProgressColumn(
                     "Poids %", min_value=0, max_value=10, format="%.1f%%"),
                 "P&L latent (USD)": st.column_config.NumberColumn(format="%.2f"),
+                "PnL assure (USD)": st.column_config.NumberColumn(
+                    "PnL assure (USD)", format="%.2f",
+                    help="Gain verrouille par le trailing stop: ce que la "
+                    "position rapporte au minimum meme si elle redescend "
+                    "jusqu'au stop. Vide tant que le stop est sous le prix "
+                    "d'entree."),
                 "P&L %": st.column_config.NumberColumn(format="%.2f%%"),
             },
         )
+        n_secured = sum(1 for r in rows if r["PnL assure (USD)"] is not None)
+        total_secured = sum(r["PnL assure (USD)"] or 0 for r in rows)
+        if n_secured:
+            st.caption(f"PnL assure: {n_secured} position(s) ont verrouille un "
+                       f"profit via leur trailing stop (total {total_secured:+,.0f} "
+                       "USD garanti meme en cas de repli).")
         cash_pct = 100 * cash / live_equity if live_equity else 0.0
         tail = ("" if is_open
                 else "  Marche ferme: les cours ne bougeront qu'a la prochaine seance.")
