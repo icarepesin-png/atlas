@@ -31,7 +31,7 @@ signals:
   min_technical_score: 80
   min_sector_score: 70
   stop_atr_multiple: 2.0
-  trailing_atr_multiple: 3.0
+  trailing_atr_multiple: 2.75    # 3.0 -> 2.75: stop suiveur un peu plus serre (verrouille plus de gains)
   take_profit_r: [1.5, 2.5, 4.0]  # TP1/TP2/TP3 en multiples de R
   atr_period: 14
 
