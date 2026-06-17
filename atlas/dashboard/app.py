@@ -151,6 +151,17 @@ def load(table: str) -> pd.DataFrame:
     return read_table_raw(table)
 
 
+def clean_nan(df: pd.DataFrame, placeholder: str = "n/d") -> pd.DataFrame:
+    """Remplace les NaN des colonnes TEXTE par un placeholder lisible.
+    Sans ca, le tableau JavaScript affiche 'undefined'. Les colonnes
+    numeriques gardent leurs NaN (rendus en case vide, ce qui est correct)."""
+    out = df.copy()
+    for c in out.columns:
+        if out[c].dtype == object:
+            out[c] = out[c].where(out[c].notna(), placeholder)
+    return out
+
+
 def us_market_open() -> bool:
     """Heures US (9h30-16h ET, lun-ven). Indicateur, ignore les jours feries."""
     if _NY is None:
@@ -229,6 +240,10 @@ def style_fig(fig, height: int = 380):
     )
     fig.update_xaxes(gridcolor=GRID, zeroline=False, linecolor=BORDER)
     fig.update_yaxes(gridcolor=GRID, zeroline=False, linecolor=BORDER)
+    # Sans texte de titre, Plotly affiche "undefined" des qu'une police de
+    # titre est definie: on force une chaine vide pour les graphes sans titre.
+    if fig.layout.title.text is None:
+        fig.update_layout(title_text="")
     return fig
 
 
@@ -442,8 +457,10 @@ with tab_pf:
         view = positions[cols].copy()
         if "opened_at" in view.columns:
             view["opened_at"] = view["opened_at"].astype(str).str[:10]
+        if "currency" in view.columns:
+            view["currency"] = view["currency"].fillna("USD")
         st.dataframe(
-            view, use_container_width=True, hide_index=True,
+            clean_nan(view), use_container_width=True, hide_index=True,
             column_config={
                 "ticker": st.column_config.TextColumn("Titre"),
                 "qty": st.column_config.NumberColumn("Quantite", format="%.0f"),
@@ -456,8 +473,24 @@ with tab_pf:
         )
     if not trades.empty:
         st.subheader("Journal des trades")
-        st.dataframe(trades.sort_values("closed_at", ascending=False),
-                     use_container_width=True, hide_index=True)
+        tcols = [c for c in ["ticker", "qty", "entry_price", "exit_price",
+                             "pnl", "exit_reason", "closed_at"]
+                 if c in trades.columns]
+        tview = trades.sort_values("closed_at", ascending=False)[tcols].copy()
+        if "closed_at" in tview.columns:
+            tview["closed_at"] = tview["closed_at"].astype(str).str[:10]
+        st.dataframe(
+            clean_nan(tview), use_container_width=True, hide_index=True,
+            column_config={
+                "ticker": st.column_config.TextColumn("Titre"),
+                "qty": st.column_config.NumberColumn("Quantite", format="%.0f"),
+                "entry_price": MONEY("Prix entree"),
+                "exit_price": MONEY("Prix sortie"),
+                "pnl": st.column_config.NumberColumn("P&L (USD)", format="%.2f"),
+                "exit_reason": st.column_config.TextColumn("Motif sortie"),
+                "closed_at": st.column_config.TextColumn("Cloture le"),
+            },
+        )
 
 with tab_sectors:
     st.subheader("Heatmap sectorielle")
@@ -470,7 +503,11 @@ with tab_sectors:
                .groupby("sector_name")
                .agg(score=("composite", "mean"), n=("ticker", "count"))
                .reset_index())
-        fig = px.treemap(agg, path=["sector_name"], values="n", color="score",
+        # px.Constant nomme la racine du treemap (sinon Plotly l'affiche
+        # "undefined"). On exclut aussi tout secteur vide/inconnu.
+        agg = agg[agg["sector_name"].astype(str).str.strip().ne("")]
+        fig = px.treemap(agg, path=[px.Constant("Tous secteurs"), "sector_name"],
+                         values="n", color="score",
                          color_continuous_scale="RdYlGn", range_color=[30, 90])
         fig.update_traces(marker=dict(cornerradius=6),
                           textfont=dict(size=14))
@@ -533,4 +570,15 @@ with tab_risk:
                           title="Exposition geographique", hole=0.45,
                           color_discrete_sequence=PIE_PALETTE[::-1])
             c2.plotly_chart(style_fig(fig2, 360), use_container_width=True)
-        st.dataframe(positions, use_container_width=True, hide_index=True)
+        rcols = [c for c in ["ticker", "qty", "avg_price", "currency",
+                             "stop", "trailing_stop"] if c in positions.columns]
+        st.dataframe(clean_nan(positions[rcols].copy()),
+                     use_container_width=True, hide_index=True,
+                     column_config={
+                         "ticker": st.column_config.TextColumn("Titre"),
+                         "qty": st.column_config.NumberColumn("Quantite", format="%.0f"),
+                         "avg_price": MONEY("Prix moyen"),
+                         "currency": st.column_config.TextColumn("Devise"),
+                         "stop": MONEY("Stop"),
+                         "trailing_stop": MONEY("Stop suiveur"),
+                     })
