@@ -45,8 +45,16 @@ from atlas.data.store import load_ohlcv, read_table_raw
 try:
     from zoneinfo import ZoneInfo
     _NY = ZoneInfo("America/New_York")
+    _PARIS = ZoneInfo("Europe/Paris")
 except Exception:
     _NY = None
+    _PARIS = None
+
+
+def now_paris() -> datetime:
+    """Heure de Paris (le serveur cloud tourne en UTC: on affiche l'heure
+    locale de l'utilisateur, pas celle du serveur)."""
+    return datetime.now(_PARIS) if _PARIS else datetime.now()
 
 # ----------------------------------------------------------------- palette ---
 
@@ -433,7 +441,8 @@ with tab_pf:
                 else "  Marche ferme: les cours ne bougeront qu'a la prochaine seance.")
         st.caption(f"Cash disponible: {cash:,.0f} USD ({cash_pct:.0f}% du portefeuille). "
                    f"Cours differes (~15 min), actualise a "
-                   f"{datetime.now().strftime('%H:%M:%S')}, auto toutes les 5 min.{tail}")
+                   f"{now_paris().strftime('%H:%M:%S')} (Paris), "
+                   f"auto toutes les 5 min.{tail}")
 
     live_valuation()
 
