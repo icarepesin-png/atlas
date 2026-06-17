@@ -40,9 +40,9 @@ portfolio:
   target_volatility: 0.12         # vol annualisee cible du portefeuille
   max_positions: 25
   max_weight_per_position: 0.05
-  max_weight_per_sector: 0.25
+  max_weight_per_sector: 0.30     # 25 -> 30%: laisse entrer quelques titres de plus (signaux concentres en tech)
   kelly_cap: 0.25                 # fraction de Kelly maximale appliquee
-  risk_per_trade: 0.0075          # 0.75% du capital risque par trade (distance au stop)
+  risk_per_trade: 0.005           # 0.75 -> 0.5%: positions plus petites, plus de noms tiennent sous le plafond
 
 risk:
   max_portfolio_drawdown: 0.15    # au-dela: reduction de risque automatique
