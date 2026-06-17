@@ -307,7 +307,7 @@ with tab_pf:
         equity_hist = load("paper_equity")
     except Exception:
         equity_hist = pd.DataFrame()
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
     last_equity = float(equity_hist["equity"].iloc[-1]) if not equity_hist.empty else None
     delta = f"{last_equity - 100_000:+,.0f}" if last_equity else None
     col1.metric("Equity (USD)", f"{last_equity:,.0f}" if last_equity else "n/a",
@@ -316,8 +316,18 @@ with tab_pf:
     realized = float(trades["pnl"].sum()) if not trades.empty else 0.0
     col3.metric("PnL realise", f"{realized:,.0f}",
                 delta=f"{realized:+,.0f}" if realized else None)
-    col4.metric("Trades clotures", len(trades))
-    st.caption("Valeurs ci-dessus: figees au dernier run nocturne (23h).")
+    n_closed = len(trades)
+    col4.metric("Trades clotures", n_closed)
+    # Taux de reussite = part des trades clotures gagnants (pnl > 0)
+    n_wins = int((trades["pnl"] > 0).sum()) if not trades.empty else 0
+    win_rate = (100 * n_wins / n_closed) if n_closed else 0.0
+    col5.metric("Taux de reussite", f"{win_rate:.0f}%" if n_closed else "n/a",
+                delta=f"{n_wins}/{n_closed} gagnants" if n_closed else None,
+                delta_color="off")
+    st.caption("Valeurs ci-dessus: figees au dernier run nocturne (23h)."
+               + ("" if n_closed >= 20 else
+                  f" Taux de reussite peu significatif ({n_closed} trades, "
+                  "fiable a partir de ~20)."))
 
     # --- Valorisation en direct (rafraichissement auto, affichage seulement) ---
     st.divider()
