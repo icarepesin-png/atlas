@@ -468,7 +468,10 @@ with tab_pf:
         if is_open:
             tail = ""
         elif holiday:
-            tail = ("  Marche US ferme aujourd'hui (jour ferie): cours figes a la "
+            from atlas.data.calendar import is_market_holiday
+            nom = is_market_holiday(today_ny) if today_ny else None
+            label = f" ({nom})" if nom else ""
+            tail = (f"  Marche US ferme aujourd'hui{label}: cours figes a la "
                     "derniere seance, c'est normal.")
         else:
             tail = "  Marche ferme: les cours ne bougeront qu'a la prochaine seance."
@@ -478,6 +481,32 @@ with tab_pf:
                    f"auto toutes les 5 min.{tail}")
 
     live_valuation()
+
+    # --- Calendrier des jours feries US (marche ferme) ---------------------
+    with st.expander("Calendrier des jours feries US (marche ferme)"):
+        from datetime import date as _date
+
+        from atlas.data.calendar import is_market_holiday, upcoming_holidays
+        today_d = (datetime.now(_NY).date() if _NY else _date.today())
+        nom_auj = is_market_holiday(today_d)
+        if nom_auj:
+            st.warning(f"Aujourd'hui ({today_d:%d/%m/%Y}) est ferie: {nom_auj}. "
+                       "Marche US ferme, valorisation figee.")
+        cal = upcoming_holidays(today_d, n=8)
+        if cal:
+            jours = {0: "lundi", 1: "mardi", 2: "mercredi", 3: "jeudi",
+                     4: "vendredi", 5: "samedi", 6: "dimanche"}
+            cal_df = pd.DataFrame([
+                {"Date": f"{jours[d.weekday()]} {d:%d/%m/%Y}",
+                 "Jour ferie": name,
+                 "Dans": "aujourd'hui" if (d - today_d).days == 0
+                         else f"{(d - today_d).days} jours"}
+                for d, name in cal
+            ])
+            st.dataframe(cal_df, use_container_width=True, hide_index=True)
+        st.caption("Bourse US (NYSE/Nasdaq) fermee ces jours-la: aucune cotation, "
+                   "valorisation figee. Le scan du soir tourne quand meme mais "
+                   "ne genere pas de nouvelles donnees de prix.")
 
     st.divider()
     if not equity_hist.empty and len(equity_hist) > 1:
