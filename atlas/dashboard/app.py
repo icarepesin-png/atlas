@@ -219,6 +219,21 @@ def live_prices_usd(tickers: tuple) -> dict:
 
 
 @st.cache_data(ttl=240)
+def latest_us_session_date():
+    """Date de la derniere seance US reellement cotee. Permet de detecter les
+    jours feries: si aucune donnee aujourd'hui (alors que c'est un jour de
+    semaine en horaires), c'est que le marche est ferme (ferie)."""
+    import yfinance as yf
+    try:
+        d = yf.download("SPY", period="1d", interval="1m", progress=False)
+        if len(d):
+            return d.index[-1].date()
+    except Exception:
+        pass
+    return None
+
+
+@st.cache_data(ttl=240)
 def paper_cash() -> float:
     # Sur le cloud: lit la table paper_account synchronisee (pas de DDL).
     acct = read_table_raw("paper_account")
@@ -406,7 +421,13 @@ with tab_pf:
         for r in rows:
             r["Poids %"] = round(100 * r["Valeur (USD)"] / live_equity, 1) if live_equity else 0.0
         latent = sum(r["P&L latent (USD)"] for r in rows)
-        is_open = us_market_open()
+        # Marche "ouvert" seulement si l'heure est ouvree ET qu'une seance a
+        # bien cote aujourd'hui (sinon = jour ferie, ex: Juneteenth).
+        today_ny = datetime.now(_NY).date() if _NY else None
+        data_fresh = latest_us_session_date() == today_ny
+        clock_open = us_market_open()
+        is_open = clock_open and data_fresh
+        holiday = clock_open and not data_fresh
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Equity en direct (USD)", f"{live_equity:,.0f}",
                   delta=f"{live_equity - 100_000:+,.0f}")
@@ -414,7 +435,8 @@ with tab_pf:
                   delta=f"{100 * mkt_value / live_equity:.0f}% du portefeuille"
                   if live_equity else None, delta_color="off")
         c3.metric("P&L latent (USD)", f"{latent:+,.0f}")
-        c4.metric("Marche US", "ouvert" if is_open else "ferme")
+        c4.metric("Marche US",
+                  "ouvert" if is_open else ("ferie" if holiday else "ferme"))
         col_order = ["Titre", "Societe", "Qte", "Prix entree (USD)",
                      "Cours actuel (USD)", "Valeur (USD)", "Poids %",
                      "P&L latent (USD)", "PnL assure (USD)", "P&L %"]
@@ -443,8 +465,13 @@ with tab_pf:
                        f"profit via leur trailing stop (total {total_secured:+,.0f} "
                        "USD garanti meme en cas de repli).")
         cash_pct = 100 * cash / live_equity if live_equity else 0.0
-        tail = ("" if is_open
-                else "  Marche ferme: les cours ne bougeront qu'a la prochaine seance.")
+        if is_open:
+            tail = ""
+        elif holiday:
+            tail = ("  Marche US ferme aujourd'hui (jour ferie): cours figes a la "
+                    "derniere seance, c'est normal.")
+        else:
+            tail = "  Marche ferme: les cours ne bougeront qu'a la prochaine seance."
         st.caption(f"Cash disponible: {cash:,.0f} USD ({cash_pct:.0f}% du portefeuille). "
                    f"Cours differes (~15 min), actualise a "
                    f"{now_paris().strftime('%H:%M:%S')} (Paris), "
