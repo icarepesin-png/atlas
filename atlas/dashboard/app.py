@@ -367,6 +367,12 @@ with tab_pf:
         if pos.empty:
             st.info("Aucune position ouverte a valoriser.")
             return
+        bcol, _ = st.columns([1, 4])
+        if bcol.button("Rafraichir maintenant", key="refresh_live",
+                       help="Force la recuperation immediate des derniers cours "
+                       "(sans attendre le rafraichissement auto de 5 min)"):
+            live_prices_usd.clear()
+            paper_cash.clear()
         with st.spinner("Recuperation des cours..."):
             prices = live_prices_usd(tuple(pos["ticker"]))
         names = company_names(tuple(pos["ticker"]))
