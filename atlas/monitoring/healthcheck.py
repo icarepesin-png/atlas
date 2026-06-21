@@ -83,8 +83,11 @@ def main() -> None:
     print(("SAIN | " if ok else "ALERTE | ") + message)
     if not ok:
         try:
-            from atlas.monitoring.notify import send
-            send("ALERTE ATLAS (healthcheck du matin)\n" + message)
+            import html as _html
+
+            from atlas.monitoring.notify import RULE, send
+            send(f"🔴 <b>ATLAS · Contrôle du matin</b>\n{RULE}\n"
+                 f"{_html.escape(message)}")
         except Exception:
             pass
         if not args.silent:

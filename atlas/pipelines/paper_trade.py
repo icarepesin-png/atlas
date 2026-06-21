@@ -94,10 +94,12 @@ def run() -> dict:
                 if order.status.value == "filled":
                     summary["sells"] += 1
                     pnl = _last_trade_pnl(engine, ex["ticker"])
-                    pnl_txt = f", P&L {pnl:+,.0f} USD" if pnl is not None else ""
+                    pnl_txt = (f" · P&amp;L {pnl:+,.0f} USD".replace(",", " ")
+                               if pnl is not None else "")
                     changes.append(
-                        f"VENTE {ex['ticker']} x{ex['qty']:.0f} @ "
-                        f"{order.filled_price:.2f} ({ex['reason']}){pnl_txt}")
+                        f"🔴 <b>VENTE {ex['ticker']}</b> ×{ex['qty']:.0f} @ "
+                        f"{order.filled_price:.2f}\n"
+                        f"     <i>{ex['reason']}</i>{pnl_txt}")
             elif ex["side"] == "update_stop":
                 with engine.begin() as conn:
                     conn.execute(text(
@@ -188,10 +190,10 @@ def run() -> dict:
                             summary["buys"] += 1
                             new_status = "executed"
                             changes.append(
-                                f"ACHAT {ticker} x{qty:.0f} @ "
-                                f"{order.filled_price:.2f} {cur} "
-                                f"(score {float(sig['composite_score']):.0f}, "
-                                f"stop {float(sig['stop']):.2f})")
+                                f"🟢 <b>ACHAT {ticker}</b> ×{qty:.0f} @ "
+                                f"{order.filled_price:.2f} {cur}\n"
+                                f"     <i>score {float(sig['composite_score']):.0f} · "
+                                f"stop {float(sig['stop']):.2f}</i>")
             if new_status == "expired":
                 summary["expired"] += 1
             with engine.begin() as conn:
@@ -242,12 +244,13 @@ def run() -> dict:
     # Notification Telegram des mouvements REELS (vous + Darius). Ne part que
     # s'il y a eu au moins une ouverture ou cloture; best-effort.
     if changes:
-        msg = (f"ATLAS - mouvements du portefeuille ({today})\n"
-               + "\n".join(changes)
-               + f"\n\nEquity: {equity:,.0f} USD | "
-               f"{summary['open_positions']} positions")
         try:
-            from atlas.monitoring.notify import send
+            from atlas.monitoring.notify import RULE, fmt_money, send
+            msg = (f"🔔 <b>ATLAS · Mouvements du {today}</b>\n{RULE}\n"
+                   + "\n\n".join(changes)
+                   + f"\n{RULE}\n"
+                   f"💼 Equity : <b>{fmt_money(equity)} USD</b> · "
+                   f"{summary['open_positions']} positions")
             send(msg)
         except Exception as exc:
             log.warning("notification mouvements echouee: %s", exc)

@@ -37,7 +37,7 @@ def is_configured() -> bool:
 
 
 def send(text: str) -> bool:
-    """Envoie un message texte a tous les destinataires configures
+    """Envoie un message (HTML) a tous les destinataires configures
     (TELEGRAM_CHAT_ID accepte une liste separee par des virgules).
     Retourne False (sans lever) si non configure ou si un envoi echoue."""
     s = get_settings()
@@ -50,7 +50,7 @@ def send(text: str) -> bool:
         try:
             resp = requests.post(
                 API.format(token=s.telegram_bot_token, method="sendMessage"),
-                json={"chat_id": chat_id, "text": text,
+                json={"chat_id": chat_id, "text": text, "parse_mode": "HTML",
                       "disable_web_page_preview": True},
                 timeout=15,
             )
@@ -65,27 +65,70 @@ def send(text: str) -> bool:
     return all_ok
 
 
+RULE = "━━━━━━━━━━━━━━━"
+
+
+def fmt_money(v) -> str:
+    """Montant lisible: 103389.46 -> '103 389'. Espaces insecables fines."""
+    try:
+        return f"{float(v):,.0f}".replace(",", " ")
+    except (TypeError, ValueError):
+        return str(v)
+
+
 def format_run_summary(health: dict) -> str:
-    """Message de synthese du run nocturne a partir du contenu de health.json."""
+    """Message de synthese du run nocturne (HTML Telegram), a partir de
+    health.json."""
+    import html as _html
+
     if health.get("status") != "ok":
-        return ("ALERTE ATLAS - run en ECHEC\n"
-                f"{health.get('error', 'erreur inconnue')}\n"
-                "Voir data/daily_run.log")
+        err = _html.escape(str(health.get("error", "erreur inconnue")))
+        return (
+            "🔴 <b>ATLAS · ALERTE</b>\n"
+            f"{RULE}\n"
+            "Le run nocturne a <b>échoué</b>.\n\n"
+            f"<code>{err}</code>\n\n"
+            "<i>Détails : data/daily_run.log</i>"
+        )
     scan = health.get("scan", {})
     paper = health.get("paper", {})
     risk = paper.get("risk_actions", [])
-    risk_line = "; ".join(risk) if risk else "non evalue (aucune position)"
+    real_risk = [r for r in risk if not str(r).startswith("none")]
+    if real_risk:
+        risk_line = "⚠️ " + " · ".join(_html.escape(r) for r in real_risk)
+    else:
+        risk_line = "✅ Tous les seuils respectés"
+
+    eq = paper.get("equity")
+    pnl = None
+    try:
+        pnl = float(eq) - 100_000
+    except (TypeError, ValueError):
+        pass
+    pnl_line = ""
+    if pnl is not None:
+        arrow = "🟢" if pnl >= 0 else "🔴"
+        pnl_line = f"   {arrow} {pnl:+,.0f}".replace(",", " ") + " depuis le départ\n"
+
+    regime = str(scan.get("regime", "?"))
+    regime_icon = {"expansion": "🌱", "recovery": "🌤️", "slowdown": "🌥️",
+                   "recession": "🌧️", "neutral": "⚪"}.get(regime, "")
+
     return (
-        f"ATLAS - run du {scan.get('as_of', '?')}\n"
-        f"Regime macro: {scan.get('regime', '?')}\n"
-        f"{scan.get('scored', '?')} titres scores, "
-        f"{scan.get('signals', '?')} signaux\n"
-        f"Achats: {paper.get('buys', 0)} | Ventes: {paper.get('sells', 0)} | "
-        f"En attente J+1: {paper.get('pending', 0)} | "
-        f"Expires: {paper.get('expired', 0)}\n"
-        f"Equity: {paper.get('equity', '?')} USD | "
-        f"Positions: {paper.get('open_positions', '?')}\n"
-        f"Risque: {risk_line}"
+        f"🤖 <b>ATLAS · Rapport du {scan.get('as_of', '?')}</b>\n"
+        f"{RULE}\n"
+        f"{regime_icon} <b>Marché</b> · régime {regime}\n"
+        f"   {scan.get('scored', '?')} titres analysés · "
+        f"{scan.get('signals', '?')} signaux\n\n"
+        f"💼 <b>Portefeuille</b>\n"
+        f"   Equity : <b>{fmt_money(eq)} USD</b>\n"
+        f"{pnl_line}"
+        f"   Positions ouvertes : {paper.get('open_positions', '?')}\n\n"
+        f"🔄 <b>Activité du jour</b>\n"
+        f"   🟢 Achats : {paper.get('buys', 0)}   🔴 Ventes : {paper.get('sells', 0)}\n"
+        f"   ⏳ En attente : {paper.get('pending', 0)}   ⌛ Expirés : {paper.get('expired', 0)}\n\n"
+        f"🛡️ <b>Risque</b>\n"
+        f"   {risk_line}"
     )
 
 

@@ -30,15 +30,26 @@ def test_format_run_summary_ok():
     msg = notify.format_run_summary(health)
     assert "2026-06-11" in msg
     assert "expansion" in msg
-    assert "554 titres scores, 7 signaux" in msg
-    assert "Achats: 1" in msg
-    assert "99984.12" in msg
-    assert "ECHEC" not in msg
+    assert "554 titres" in msg
+    assert "7 signaux" in msg
+    assert "Achats : 1" in msg
+    # equity formatee: les chiffres '99984' apparaissent dans le message
+    digits = "".join(c for c in msg if c.isdigit())
+    assert "99984" in digits
+    assert "ALERTE" not in msg
 
 
 def test_format_run_summary_failure():
     health = {"status": "error", "error": "ValueError: boom"}
     msg = notify.format_run_summary(health)
-    assert "ECHEC" in msg
+    assert "ALERTE" in msg
     assert "ValueError: boom" in msg
     assert "daily_run.log" in msg
+
+
+def test_fmt_money():
+    # 103389 avec un separateur de milliers (espace, quel qu'en soit le type)
+    r = notify.fmt_money(103389.46)
+    assert "".join(c for c in r if c.isdigit()) == "103389"
+    assert not r.isdigit()  # il y a bien un separateur
+    assert notify.fmt_money("n/a") == "n/a"
