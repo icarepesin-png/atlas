@@ -53,9 +53,20 @@ def test_risk_based_size():
     # Stop serre: la contrainte max_weight_per_position (5% = 50 actions a 100)
     # prend le pas sur le sizing par risque (750 de risque / 5 = 150 actions).
     assert risk_based_size(capital=100_000, entry=100.0, stop=95.0) == 50
-    # Stop large: le sizing par risque devient la contrainte active (750/20).
-    assert risk_based_size(capital=100_000, entry=100.0, stop=80.0) == 37
+    # Stop large: le sizing par risque devient la contrainte active.
+    # risk_per_trade=0.5% (config actuelle): 100000*0.005/20 = 25 actions.
+    assert risk_based_size(capital=100_000, entry=100.0, stop=80.0) == 25
     assert risk_based_size(100_000, 100.0, 100.0) == 0
+
+
+def test_risk_based_size_nan_safe():
+    """Entrees NaN (cours absent un jour ferie) -> 0, jamais d'exception.
+    Regression: int(NaN) faisait planter le run nocturne (Juneteenth 2026)."""
+    nan = float("nan")
+    assert risk_based_size(nan, 100.0, 95.0) == 0          # equity NaN
+    assert risk_based_size(100_000, nan, 95.0) == 0        # entree NaN
+    assert risk_based_size(100_000, 100.0, nan) == 0       # stop NaN
+    assert risk_based_size(float("inf"), 100.0, 95.0) == 0  # inf
 
 
 def test_kelly_capped():

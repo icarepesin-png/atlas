@@ -16,6 +16,7 @@ restes inexecutables 7 jours expirent.
 from __future__ import annotations
 
 import logging
+import math
 from datetime import date
 
 import pandas as pd
@@ -55,12 +56,15 @@ def _last_trade_pnl(engine, ticker: str) -> float | None:
 
 
 def _marks_usd(tickers, rates: dict[str, float]) -> dict[str, float]:
-    """Dernier cours converti en USD pour chaque ticker."""
+    """Dernier cours converti en USD pour chaque ticker. Ignore les cours
+    NaN (ex: barre d'un jour ferie) pour ne pas contaminer l'equity."""
     out = {}
     for t in tickers:
         df = load_ohlcv(t)
         if not df.empty:
-            out[t] = to_usd(float(df["close"].iloc[-1]), currency_of(t), rates)
+            px = float(df["close"].iloc[-1])
+            if math.isfinite(px):
+                out[t] = to_usd(px, currency_of(t), rates)
     return out
 
 
@@ -143,10 +147,15 @@ def run() -> dict:
                     summary["pending"] += 1
                     continue
             else:
+                open_px = float(bar["open"])           # ouverture J+1, locale
+                # Barre sans cours valide (jour ferie/donnee manquante):
+                # on n'execute pas et on n'expire pas, on reessaie au prochain run.
+                if not math.isfinite(open_px) or open_px <= 0:
+                    summary["pending"] += 1
+                    continue
                 new_status = "expired"
                 cur = currency_of(ticker)
                 fx = rates.get(cur, 1.0)
-                open_px = float(bar["open"])           # ouverture J+1, locale
                 entry_usd = open_px * fx
                 stop_usd = float(sig["stop"]) * fx
                 sec = sector_of.get(ticker, "Unknown")

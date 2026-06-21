@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 
 from atlas.config import get_config
 
@@ -23,11 +24,17 @@ def risk_based_size(
     cfg = get_config().portfolio
     risk_pct = float(cfg.get("risk_per_trade", 0.0075))
     max_w = float(cfg.get("max_weight_per_position", 0.05))
+    # Entrees invalides (NaN/inf, ex: cours absent un jour ferie) -> 0, jamais
+    # une exception. int(NaN) plantait le run nocturne (cf. Juneteenth 2026).
+    if not all(math.isfinite(x) for x in (capital, entry, stop)):
+        return 0
     r = entry - stop
     if r <= 0 or entry <= 0 or capital <= 0:
         return 0
     qty_risk = (capital * risk_pct * exposure_modifier) / r
     qty_cap = (capital * max_w) / entry
+    if not math.isfinite(qty_risk) or not math.isfinite(qty_cap):
+        return 0
     return int(max(min(qty_risk, qty_cap), 0))
 
 
