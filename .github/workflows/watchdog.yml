@@ -1,0 +1,42 @@
+name: ATLAS Watchdog
+
+# Gardien INDEPENDANT du PC: verifie chaque jour que les donnees sont fraiches
+# et que le dashboard cloud repond. Alerte Telegram sinon, et redeploie
+# automatiquement le dashboard s'il est plante (commit vide -> rebuild).
+
+on:
+  schedule:
+    - cron: "0 10 * * *"     # tous les jours a 10h00 UTC (12h00 Paris l'ete)
+  workflow_dispatch: {}       # declenchable a la main depuis l'onglet Actions
+
+permissions:
+  contents: write             # necessaire pour le commit vide de redeploiement
+
+jobs:
+  watchdog:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Installer les dependances minimales
+        run: pip install --quiet requests psycopg2-binary
+
+      - name: Verifier donnees + dashboard
+        id: check
+        env:
+          ATLAS_CLOUD_DB: ${{ secrets.ATLAS_CLOUD_DB }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python scripts/cloud_watchdog.py
+
+      - name: Redeployer le dashboard si plante
+        if: steps.check.outputs.app_down == 'true'
+        run: |
+          git config user.name "atlas-watchdog"
+          git config user.email "watchdog@atlas.local"
+          git commit --allow-empty -m "watchdog: redeploiement automatique du dashboard"
+          git push
