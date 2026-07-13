@@ -1,6 +1,6 @@
-# Core
-pandas>=2.1
-numpy>=1.26
+# Core (bornes hautes: eviter qu'une version majeure future casse le cloud)
+pandas>=2.1,<3.1
+numpy>=1.26,<3
 scipy>=1.11
 pyyaml>=6.0
 pydantic>=2.5
@@ -8,7 +8,7 @@ pydantic-settings>=2.1
 python-dotenv>=1.0
 
 # Data providers
-yfinance>=0.2.40
+yfinance>=0.2.40,<2
 fredapi>=0.5.1
 requests>=2.31
 lxml>=5.1
@@ -23,8 +23,8 @@ fastapi>=0.110
 uvicorn[standard]>=0.27
 
 # Dashboard
-streamlit>=1.32
-plotly>=5.18
+streamlit>=1.32,<2
+plotly>=5.18,<8
 tzdata>=2024.1         # fuseaux horaires (indicateur marche US ouvert/ferme)
 
 # Tests
