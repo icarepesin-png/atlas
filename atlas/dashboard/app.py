@@ -440,8 +440,25 @@ with tab_pf:
         col_order = ["Titre", "Societe", "Qte", "Prix entree (USD)",
                      "Cours actuel (USD)", "Valeur (USD)", "Poids %",
                      "P&L latent (USD)", "PnL assure (USD)", "P&L %"]
+        df_live = pd.DataFrame(rows)[col_order]
+
+        def _pnl_color(v):
+            # Vert si positif, rouge si negatif, rien si vide/nul.
+            try:
+                fv = float(v)
+            except (TypeError, ValueError):
+                return ""
+            if fv > 0:
+                return "color: #2e9e6b; font-weight: 600"
+            if fv < 0:
+                return "color: #e35d6a; font-weight: 600"
+            return ""
+
+        styled = df_live.style.map(
+            _pnl_color,
+            subset=["P&L latent (USD)", "PnL assure (USD)", "P&L %"])
         st.dataframe(
-            pd.DataFrame(rows)[col_order], use_container_width=True, hide_index=True,
+            styled, use_container_width=True, hide_index=True,
             column_config={
                 "Societe": st.column_config.TextColumn("Societe", width="medium"),
                 "Qte": st.column_config.NumberColumn(format="%.0f"),
