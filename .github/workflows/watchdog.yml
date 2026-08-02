@@ -7,7 +7,13 @@ name: ATLAS Watchdog
 on:
   schedule:
     - cron: "0 10 * * *"     # tous les jours a 10h00 UTC (12h00 Paris l'ete)
-  workflow_dispatch: {}       # declenchable a la main depuis l'onglet Actions
+  workflow_dispatch:          # declenchable a la main depuis l'onglet Actions
+    inputs:
+      mode:
+        description: "surveillance = comme chaque jour | test = force un message Telegram de controle"
+        type: choice
+        options: [surveillance, test]
+        default: test
 
 permissions:
   contents: write             # necessaire pour le commit vide de redeploiement
@@ -31,7 +37,12 @@ jobs:
           ATLAS_CLOUD_DB: ${{ secrets.ATLAS_CLOUD_DB }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python scripts/cloud_watchdog.py
+        run: |
+          if [ "${{ github.event.inputs.mode }}" = "test" ]; then
+            python scripts/cloud_watchdog.py --test
+          else
+            python scripts/cloud_watchdog.py
+          fi
 
       - name: Redeployer le dashboard si plante
         if: steps.check.outputs.app_down == 'true'

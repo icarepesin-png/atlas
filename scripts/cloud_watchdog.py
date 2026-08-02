@@ -14,6 +14,16 @@ Role: surveiller le systeme depuis l'exterieur, car les alertes locales
 Zero dependance au code atlas (script autonome): requests + psycopg2 suffisent.
 Variables d'environnement requises (GitHub Secrets):
   ATLAS_CLOUD_DB, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+
+REGLE D'OR: un gardien muet est pire que pas de gardien. Ce script SORT EN
+ERREUR (exit 1) des qu'il ne peut pas faire son travail (secret manquant,
+Telegram injoignable). Le job GitHub passe alors au rouge et GitHub envoie
+un mail au proprietaire du depot: c'est le canal de secours si Telegram est
+casse. Il ne doit JAMAIS finir vert en ayant avale une alerte.
+
+Usage:
+  python scripts/cloud_watchdog.py            # surveillance normale
+  python scripts/cloud_watchdog.py --test     # envoie un message de controle
 """
 
 from __future__ import annotations
@@ -27,6 +37,18 @@ import requests
 APP_URL = "https://bfuunx3imesbnlybietd72.streamlit.app"
 RULE = "━━━━━━━━━━━━━━━"
 STALE_BUSINESS_DAYS = 2  # tolerance: 1 jour ouvre manque = possible ferie
+
+
+def require_secrets() -> None:
+    """Sort en erreur si un secret manque: sinon le gardien serait aveugle."""
+    manquants = [nom for nom in ("ATLAS_CLOUD_DB", "TELEGRAM_BOT_TOKEN",
+                                 "TELEGRAM_CHAT_ID")
+                 if not os.environ.get(nom, "").strip()]
+    if manquants:
+        print("SECRETS MANQUANTS: " + ", ".join(manquants))
+        print("Le gardien ne peut ni surveiller ni alerter. A ajouter dans")
+        print("Settings > Secrets and variables > Actions du depot GitHub.")
+        sys.exit(1)
 
 
 def send_telegram(text: str) -> bool:
@@ -97,7 +119,28 @@ def check_app_alive() -> tuple[bool, str]:
         return False, f"injoignable: {type(exc).__name__}"
 
 
+def run_test() -> None:
+    """Preuve de bout en bout: secrets lus, Neon interroge, Telegram recu."""
+    fresh_ok, fresh_msg = check_data_freshness()
+    app_ok, app_msg = check_app_alive()
+    texte = (f"🛰️ <b>ATLAS · Test du gardien cloud</b>\n{RULE}\n"
+             "Ce message prouve que le gardien peut vous joindre même PC "
+             "éteint.\n\n"
+             f"{'🟢' if fresh_ok else '🔴'} Données : {fresh_msg}\n"
+             f"{'🟢' if app_ok else '🔴'} Dashboard : {app_msg}")
+    if not send_telegram(texte):
+        print("ECHEC: le message de test n'est pas parti")
+        sys.exit(1)
+    print("message de test envoye")
+
+
 def main() -> None:
+    require_secrets()
+
+    if "--test" in sys.argv:
+        run_test()
+        return
+
     fresh_ok, fresh_msg = check_data_freshness()
     app_ok, app_msg = check_app_alive()
     print(f"donnees : {'OK' if fresh_ok else 'PROBLEME'} - {fresh_msg}")
@@ -110,6 +153,12 @@ def main() -> None:
             f.write(f"app_down={'true' if not app_ok else 'false'}\n")
 
     if fresh_ok and app_ok:
+        # Battement de coeur du lundi: sans lui, le silence est ambigu
+        # (gardien sain ou gardien mort? impossible a distinguer).
+        if date.today().weekday() == 0:
+            send_telegram(f"🛰️ <b>ATLAS · Gardien cloud</b>\n{RULE}\n"
+                          "🟢 Tout est sain cette semaine.\n"
+                          f"{fresh_msg}")
         print("tout est sain, aucune alerte")
         return
 
@@ -120,8 +169,13 @@ def main() -> None:
     if not app_ok:
         lines.append(f"🟠 <b>Dashboard cloud en panne</b> ({app_msg})\n"
                      "➡️ Redéploiement automatique demandé.")
-    send_telegram("\n\n".join(lines))
-    # Code de sortie 0: l'alerte est le resultat attendu, pas un echec du job
+    if not send_telegram("\n\n".join(lines)):
+        # Alerte detectee mais non delivree = panne du filet de securite.
+        # Job rouge -> mail GitHub, seul canal restant.
+        print("ECHEC CRITIQUE: alerte detectee mais Telegram injoignable")
+        sys.exit(1)
+    print("alerte envoyee")
+    # Code de sortie 0: l'alerte est partie, le job a fait son travail
     sys.exit(0)
 
 
