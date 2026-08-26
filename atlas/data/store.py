@@ -18,6 +18,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 
 from atlas.config import get_config, get_settings
+from atlas.data.markets import last_expected_session, market_of
 
 log = logging.getLogger(__name__)
 
@@ -156,15 +157,32 @@ def load_ohlcv(ticker: str) -> pd.DataFrame:
         return pd.DataFrame()
 
 
+def is_cache_fresh(ticker: str, df: pd.DataFrame | None = None,
+                   now=None) -> bool:
+    """Le cache contient-il la derniere seance CLOSE de la place du titre ?
+
+    Remplace l'ancien critere "age <= 1 jour calendaire", qui declarait frais
+    un cache datant de la veille: le scan de 23h ne retelechargeait alors
+    qu'un jour sur deux et le systeme decidait sur les cours de la veille
+    (equity gelee, trailing stops non releves, stops touches non vus).
+
+    Se tromper dans le sens "trop frais" est benin (un telechargement pour
+    rien); l'inverse fausse les decisions. En cas de doute, on retelecharge.
+    """
+    if df is None:
+        df = load_ohlcv(ticker)
+    if df is None or df.empty:
+        return False
+    attendue = last_expected_session(market_of(ticker), now)
+    return df.index.max().date() >= attendue
+
+
 def get_ohlcv_cached(ticker: str, provider, start=None, end=None,
-                     max_age_days: int = 1) -> pd.DataFrame:
+                     now=None) -> pd.DataFrame:
     """Cache-first read; refresh from provider when stale."""
     df = load_ohlcv(ticker)
-    if not df.empty:
-        last = df.index.max()
-        age = (pd.Timestamp(date.today()) - last).days
-        if age <= max_age_days:
-            return df
+    if is_cache_fresh(ticker, df, now):
+        return df
     fresh = provider.get_ohlcv(ticker, start=start, end=end)
     if not fresh.empty:
         save_ohlcv(ticker, fresh)
@@ -173,16 +191,15 @@ def get_ohlcv_cached(ticker: str, provider, start=None, end=None,
 
 
 def get_ohlcv_batch_cached(tickers: list[str], provider, start=None, end=None,
-                           max_age_days: int = 1) -> dict[str, pd.DataFrame]:
+                           now=None) -> dict[str, pd.DataFrame]:
     """Batch variant: one multi-ticker request for everything stale or absent.
 
     Indispensable au-dela de ~100 titres (le sequentiel prend des heures)."""
     prices: dict[str, pd.DataFrame] = {}
-    today = pd.Timestamp(date.today())
     stale: list[str] = []
     for t in tickers:
         df = load_ohlcv(t)
-        if not df.empty and (today - df.index.max()).days <= max_age_days:
+        if is_cache_fresh(t, df, now):
             prices[t] = df
         else:
             stale.append(t)
