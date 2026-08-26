@@ -143,10 +143,17 @@ def check_exits(positions: pd.DataFrame, prices: dict[str, pd.DataFrame]) -> lis
         anchor_high = (float(since_entry["high"].max()) if len(since_entry)
                        else float(df["high"].iloc[-1]))
         new_trail = anchor_high - trail_mult * float(atr(df).iloc[-1])
-        effective_stop = max(float(pos.get("stop") or 0), float(pos.get("trailing_stop") or 0), new_trail)
+        stop_initial = float(pos.get("stop") or 0)
+        effective_stop = max(stop_initial,
+                             float(pos.get("trailing_stop") or 0), new_trail)
         if last <= effective_stop:
+            # La raison exacte est ce qui rend les trades analysables: une
+            # sortie sur stop initial est une these qui echoue, une sortie sur
+            # stop suiveur est un gain qu'on encaisse. Ne pas confondre.
+            raison = ("stop initial" if effective_stop <= stop_initial
+                      else "stop suiveur")
             exits.append({"ticker": pos["ticker"], "side": "sell",
-                          "qty": float(pos["qty"]), "reason": "stop/trailing",
+                          "qty": float(pos["qty"]), "reason": raison,
                           "price": last})
         else:
             exits.append({"ticker": pos["ticker"], "side": "update_stop",
