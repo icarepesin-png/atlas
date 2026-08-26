@@ -45,7 +45,20 @@ def test_exit_when_stop_hit(pullback_ohlcv):
     pos.loc[0, "stop"] = 170.0  # stop au-dessus du dernier cours (160)
     exits = check_exits(pos, {"TEST": pullback_ohlcv})
     assert exits[0]["side"] == "sell"
-    assert exits[0]["reason"] == "stop/trailing"
+    # La raison doit dire LEQUEL des deux stops a declenche: une these qui
+    # echoue (stop initial) et un gain qu'on encaisse (stop suiveur) ne
+    # s'analysent pas de la meme facon.
+    assert exits[0]["reason"] == "stop initial"
+
+
+def test_reason_distingue_le_stop_suiveur(pullback_ohlcv):
+    """Sortie declenchee par le trailing: la raison doit le dire."""
+    opened = pullback_ohlcv.index[40].isoformat() + "+00:00"
+    pos = _positions(opened)
+    pos.loc[0, "stop"] = 10.0          # stop initial tres bas: hors jeu
+    exits = check_exits(pos, {"TEST": pullback_ohlcv})
+    assert exits[0]["side"] == "sell"
+    assert exits[0]["reason"] == "stop suiveur"
 
 
 def test_trailing_rises_with_post_entry_high(pullback_ohlcv):
