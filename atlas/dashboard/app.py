@@ -171,14 +171,69 @@ def clean_nan(df: pd.DataFrame, placeholder: str = "n/d") -> pd.DataFrame:
 
 
 def us_market_open() -> bool:
-    """Heures US (9h30-16h ET, lun-ven). Indicateur, ignore les jours feries."""
-    if _NY is None:
-        return False
-    now = datetime.now(_NY)
-    if now.weekday() >= 5:
-        return False
-    hm = now.hour * 60 + now.minute
-    return 9 * 60 + 30 <= hm <= 16 * 60
+    """Heures US (9h30-16h ET, lun-ven), jours feries inclus."""
+    from atlas.data.markets import is_open, market_by_code
+
+    return is_open(market_by_code("US"))
+
+
+# Libelles et pastilles des etats de seance (partages metrique + panneau)
+ETATS = {
+    "ouvert": ("🟢", "ouvert"),
+    "pause": ("🟡", "pause dejeuner"),
+    "avant": ("🔵", "avant ouverture"),
+    "apres": ("⚪", "cloture"),
+    "ferie": ("🔴", "ferie"),
+    "week-end": ("⚫", "week-end"),
+}
+
+
+def carte_place(p: dict) -> str:
+    """Carte compacte d'une place: pastille, heure locale, etat, echeance."""
+    bord = "#2e9e6b" if p["ouvert"] else "#3a3f4b"
+    detail = p["ferie"] or p["echeance"]
+    return (
+        f"<div style='border:1px solid {bord};border-left:4px solid {bord};"
+        "border-radius:8px;padding:10px 12px;margin-bottom:8px;'>"
+        f"<div style='font-size:0.95rem;font-weight:600;'>{p['pastille']} "
+        f"{p['nom']}</div>"
+        f"<div style='font-size:1.35rem;font-weight:700;line-height:1.5;'>"
+        f"{p['heure']}</div>"
+        f"<div style='font-size:0.78rem;opacity:0.75;'>{p['etat']} · "
+        f"{detail}</div>"
+        f"<div style='font-size:0.78rem;opacity:0.55;'>{p['titres']} titre(s) · "
+        f"{p['devise']}</div></div>")
+
+
+def market_rows(tickers) -> list[dict]:
+    """Etat de chaque place ou le portefeuille detient quelque chose."""
+    from atlas.data.markets import (last_expected_session, market_of,
+                                    markets_of, next_open, session_state)
+
+    rows = []
+    for code, ts in markets_of(tickers).items():
+        m = market_of(ts[0])
+        etat = session_state(m)
+        pastille, libelle = ETATS[etat]
+        locale = datetime.now(m.zone())
+        if etat in ("ouvert", "pause"):
+            echeance = f"cloture a {m.fermeture:%H:%M}"
+        else:
+            nxt = next_open(m)
+            jours = (nxt.date() - locale.date()).days
+            quand = ("aujourd'hui" if jours == 0 else
+                     "demain" if jours == 1 else f"dans {jours} jours")
+            echeance = f"ouvre {quand} a {m.ouverture:%H:%M}"
+        rows.append({
+            "code": code, "nom": m.nom, "pastille": pastille,
+            "etat": libelle, "heure": locale.strftime("%H:%M"),
+            "echeance": echeance, "titres": len(ts),
+            "tickers": sorted(ts), "devise": m.devise,
+            "ferie": m.ferie_le(locale.date()),
+            "derniere_seance": last_expected_session(m),
+            "ouvert": etat in ("ouvert", "pause"),
+        })
+    return sorted(rows, key=lambda r: (-r["titres"], r["nom"]))
 
 
 @st.cache_data(ttl=240)
@@ -421,13 +476,11 @@ with tab_pf:
         for r in rows:
             r["Poids %"] = round(100 * r["Valeur (USD)"] / live_equity, 1) if live_equity else 0.0
         latent = sum(r["P&L latent (USD)"] for r in rows)
-        # Marche "ouvert" seulement si l'heure est ouvree ET qu'une seance a
-        # bien cote aujourd'hui (sinon = jour ferie, ex: Juneteenth).
+        # Etat de CHAQUE place detenue (le portefeuille n'est pas que US).
+        places = market_rows(list(pos["ticker"]))
+        ouvertes = [p for p in places if p["ouvert"]]
         today_ny = datetime.now(_NY).date() if _NY else None
-        data_fresh = latest_us_session_date() == today_ny
-        clock_open = us_market_open()
-        is_open = clock_open and data_fresh
-        holiday = clock_open and not data_fresh
+        is_open = any(p["ouvert"] for p in places)
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Equity en direct (USD)", f"{live_equity:,.0f}",
                   delta=f"{live_equity - 100_000:+,.0f}")
@@ -435,8 +488,9 @@ with tab_pf:
                   delta=f"{100 * mkt_value / live_equity:.0f}% du portefeuille"
                   if live_equity else None, delta_color="off")
         c3.metric("P&L latent (USD)", f"{latent:+,.0f}")
-        c4.metric("Marche US",
-                  "ouvert" if is_open else ("ferie" if holiday else "ferme"))
+        c4.metric("Places ouvertes", f"{len(ouvertes)}/{len(places)}",
+                  delta=", ".join(p["nom"] for p in ouvertes) or "toutes fermees",
+                  delta_color="off")
         col_order = ["Titre", "Societe", "Qte", "Prix entree (USD)",
                      "Cours actuel (USD)", "Valeur (USD)", "Poids %",
                      "P&L latent (USD)", "PnL assure (USD)", "P&L %"]
@@ -497,33 +551,56 @@ with tab_pf:
                    f"{now_paris().strftime('%H:%M:%S')} (Paris), "
                    f"auto toutes les 5 min.{tail}")
 
+        # --- Etat des places ou l'on detient des titres ---------------------
+        st.markdown("##### Places de cotation")
+        cols = st.columns(min(len(places), 4) or 1)
+        for i, p in enumerate(places):
+            with cols[i % len(cols)]:
+                st.markdown(carte_place(p), unsafe_allow_html=True)
+        st.caption("Heure locale de chaque place. Une position ne bouge que "
+                   "pendant la seance de SA place: un titre de Paris est fige "
+                   "des 17h30, un titre de New York jusqu'a 15h30 (heure de Paris).")
+
     live_valuation()
 
-    # --- Calendrier des jours feries US (marche ferme) ---------------------
-    with st.expander("Calendrier des jours feries US (marche ferme)"):
+    # --- Calendrier des fermetures, toutes places confondues ---------------
+    with st.expander("Calendrier des fermetures (toutes les places)"):
         from datetime import date as _date
 
-        from atlas.data.calendar import is_market_holiday, upcoming_holidays
-        today_d = (datetime.now(_NY).date() if _NY else _date.today())
-        nom_auj = is_market_holiday(today_d)
-        if nom_auj:
-            st.warning(f"Aujourd'hui ({today_d:%d/%m/%Y}) est ferie: {nom_auj}. "
-                       "Marche US ferme, valorisation figee.")
-        cal = upcoming_holidays(today_d, n=8)
-        if cal:
-            jours = {0: "lundi", 1: "mardi", 2: "mercredi", 3: "jeudi",
-                     4: "vendredi", 5: "samedi", 6: "dimanche"}
-            cal_df = pd.DataFrame([
-                {"Date": f"{jours[d.weekday()]} {d:%d/%m/%Y}",
-                 "Jour ferie": name,
-                 "Dans": "aujourd'hui" if (d - today_d).days == 0
-                         else f"{(d - today_d).days} jours"}
-                for d, name in cal
-            ])
+        from atlas.data.markets import market_by_code, upcoming_holidays
+
+        today_d = _date.today()
+        # Recalcul: `places` vit dans le fragment de valorisation.
+        pos_cal = read_table_raw("positions")
+        places = (market_rows(list(pos_cal["ticker"]))
+                  if not pos_cal.empty else [])
+        codes = [p["code"] for p in places] or ["US"]
+        jours = {0: "lundi", 1: "mardi", 2: "mercredi", 3: "jeudi",
+                 4: "vendredi", 5: "samedi", 6: "dimanche"}
+
+        fermees_auj = [p for p in places if p["ferie"]]
+        for p in fermees_auj:
+            st.warning(f"{p['nom']} est fermee aujourd'hui ({p['ferie']}). "
+                       f"Les {p['titres']} titre(s) de cette place gardent le "
+                       "cours de la derniere seance.")
+
+        lignes = []
+        for code in codes:
+            m = market_by_code(code)
+            for d, nom in upcoming_holidays(m, today_d, n=6):
+                lignes.append({"Date": f"{jours[d.weekday()]} {d:%d/%m/%Y}",
+                               "Place": m.nom, "Fermeture": nom,
+                               "_d": d,
+                               "Dans": "aujourd'hui" if (d - today_d).days == 0
+                                       else f"{(d - today_d).days} jours"})
+        if lignes:
+            cal_df = (pd.DataFrame(lignes).sort_values(["_d", "Place"])
+                      .drop(columns="_d").head(20))
             st.dataframe(cal_df, use_container_width=True, hide_index=True)
-        st.caption("Bourse US (NYSE/Nasdaq) fermee ces jours-la: aucune cotation, "
-                   "valorisation figee. Le scan du soir tourne quand meme mais "
-                   "ne genere pas de nouvelles donnees de prix.")
+        st.caption("Chaque place a son propre calendrier: le 4 juillet ne ferme "
+                   "que New York, le lundi de Paques ne ferme pas New York. "
+                   "Un titre dont la place est fermee garde son dernier cours, "
+                   "c'est normal et cela ne fausse pas l'equity.")
 
     st.divider()
     if not equity_hist.empty and len(equity_hist) > 1:
