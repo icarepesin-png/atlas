@@ -87,6 +87,15 @@ def main() -> None:
         except Exception as exc:
             log.warning("sentiment fantome echoue (non bloquant): %s", exc)
             health["sentiment_ghost"] = {"status": "error", "error": str(exc)}
+        # Surveillance du pouvoir predictif des piliers. Sans cette mesure,
+        # un signal qui s'inverse reste invisible: le pilier technique a
+        # tourne a IC negatif tout l'ete sans que rien ne l'indique.
+        try:
+            from atlas.pipelines import suivi_facteurs
+            health["facteurs"] = suivi_facteurs.run()
+        except Exception as exc:
+            log.warning("suivi des facteurs echoue (non bloquant): %s", exc)
+            health["facteurs"] = {"status": "error", "error": str(exc)}
         # Pousse les donnees vers le cloud pour le dashboard heberge (si configure)
         try:
             from atlas.pipelines import sync_to_cloud
