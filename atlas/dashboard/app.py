@@ -401,10 +401,22 @@ with tab_pf:
     st.subheader("Portefeuille (paper)")
     positions = load("positions")
     trades = load("trades")
+    # Courbe recalculee si disponible: jusqu'au 2026-08-26, l'equity du soir
+    # etait recopiee de la veille un jour sur deux (cache de cours perime), et
+    # les jours PC eteint manquaient purement. paper_equity_recalc rejoue les
+    # ordres aux cours reels; on la prefere des qu'elle est plus complete.
+    equity_corrigee = False
     try:
         equity_hist = load("paper_equity")
     except Exception:
         equity_hist = pd.DataFrame()
+    try:
+        recalc = load("paper_equity_recalc")
+        if not recalc.empty and len(recalc) >= len(equity_hist):
+            equity_hist = recalc[["date", "equity"]]
+            equity_corrigee = True
+    except Exception:
+        pass
     col1, col2, col3, col4, col5 = st.columns(5)
     last_equity = float(equity_hist["equity"].iloc[-1]) if not equity_hist.empty else None
     delta = f"{last_equity - 100_000:+,.0f}" if last_equity else None
@@ -422,6 +434,10 @@ with tab_pf:
     col5.metric("Taux de reussite", f"{win_rate:.0f}%" if n_closed else "n/a",
                 delta=f"{n_wins}/{n_closed} gagnants" if n_closed else None,
                 delta_color="off")
+    if equity_corrigee:
+        st.caption("Courbe d'equity RECALCULEE a partir des ordres et des cours "
+                   "de cloture reels (l'ancienne recopiait la veille un jour "
+                   "sur deux, et sautait les jours PC eteint).")
     st.caption("Valeurs ci-dessus: figees au dernier run nocturne (23h)."
                + ("" if n_closed >= 20 else
                   f" Taux de reussite peu significatif ({n_closed} trades, "
@@ -477,7 +493,14 @@ with tab_pf:
             r["Poids %"] = round(100 * r["Valeur (USD)"] / live_equity, 1) if live_equity else 0.0
         latent = sum(r["P&L latent (USD)"] for r in rows)
         # Etat de CHAQUE place detenue (le portefeuille n'est pas que US).
-        places = market_rows(list(pos["ticker"]))
+        # Degradation propre: sans fuseaux horaires (tzdata absent du cloud),
+        # on perd le panneau, jamais la page entiere - cette app a deja
+        # plante en "Oh no" pour moins que ca.
+        try:
+            places = market_rows(list(pos["ticker"]))
+        except Exception as exc:  # noqa: BLE001
+            st.caption(f"Etat des places indisponible ({type(exc).__name__}).")
+            places = []
         ouvertes = [p for p in places if p["ouvert"]]
         today_ny = datetime.now(_NY).date() if _NY else None
         is_open = any(p["ouvert"] for p in places)
@@ -488,9 +511,10 @@ with tab_pf:
                   delta=f"{100 * mkt_value / live_equity:.0f}% du portefeuille"
                   if live_equity else None, delta_color="off")
         c3.metric("P&L latent (USD)", f"{latent:+,.0f}")
-        c4.metric("Places ouvertes", f"{len(ouvertes)}/{len(places)}",
-                  delta=", ".join(p["nom"] for p in ouvertes) or "toutes fermees",
-                  delta_color="off")
+        c4.metric("Places ouvertes",
+                  f"{len(ouvertes)}/{len(places)}" if places else "n/a",
+                  delta=(", ".join(p["nom"] for p in ouvertes) or "toutes fermees")
+                  if places else None, delta_color="off")
         col_order = ["Titre", "Societe", "Qte", "Prix entree (USD)",
                      "Cours actuel (USD)", "Valeur (USD)", "Poids %",
                      "P&L latent (USD)", "PnL assure (USD)", "P&L %"]
@@ -552,6 +576,8 @@ with tab_pf:
                    f"auto toutes les 5 min.{tail}")
 
         # --- Etat des places ou l'on detient des titres ---------------------
+        if not places:
+            return
         st.markdown("##### Places de cotation")
         cols = st.columns(min(len(places), 4) or 1)
         for i, p in enumerate(places):
@@ -572,8 +598,11 @@ with tab_pf:
         today_d = _date.today()
         # Recalcul: `places` vit dans le fragment de valorisation.
         pos_cal = read_table_raw("positions")
-        places = (market_rows(list(pos_cal["ticker"]))
-                  if not pos_cal.empty else [])
+        try:
+            places = (market_rows(list(pos_cal["ticker"]))
+                      if not pos_cal.empty else [])
+        except Exception:  # noqa: BLE001
+            places = []
         codes = [p["code"] for p in places] or ["US"]
         jours = {0: "lundi", 1: "mardi", 2: "mercredi", 3: "jeudi",
                  4: "vendredi", 5: "samedi", 6: "dimanche"}
