@@ -7,6 +7,12 @@
 # 2. Lance le dashboard au PREMIER PLAN (processus principal, tourne en continu).
 #
 # Resultat: des que le PC demarre, un run manque est rattrape automatiquement.
+#
+# ATTENTION: la tache "ATLAS Catchup" a AUSSI un declencheur d'ouverture de
+# session. Les deux rattrapages demarraient donc a la meme seconde et ont
+# achete GEN et FTNT en double le 2026-08-08. Un verrou d'execution
+# (atlas/pipelines/lock.py) rend desormais ce cas inoffensif: le second
+# processus constate le verrou et s'arrete sans rien faire.
 
 $py = "C:\bot trading\atlas\.venv\Scripts\python.exe"
 Set-Location "C:\bot trading\atlas"
