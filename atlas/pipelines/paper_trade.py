@@ -90,7 +90,8 @@ def run() -> dict:
                 order = broker.submit_order(
                     Order(ex["ticker"], OrderSide.SELL, ex["qty"], OrderType.MARKET),
                     reference_price=ex["price"],
-                    fx_rate=rates.get(cur, 1.0), currency=cur)
+                    fx_rate=rates.get(cur, 1.0), currency=cur,
+                    reason=ex["reason"])
                 if order.status.value == "filled":
                     summary["sells"] += 1
                     pnl = _last_trade_pnl(engine, ex["ticker"])
