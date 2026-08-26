@@ -67,11 +67,16 @@ class PaperBroker:
     # -- orders ------------------------------------------------------------------
 
     def submit_order(self, order: Order, reference_price: float | None = None,
-                     fx_rate: float = 1.0, currency: str = "USD") -> Order:
+                     fx_rate: float = 1.0, currency: str = "USD",
+                     reason: str = "signal") -> Order:
         """Immediate simulated fill at reference (or limit) price + slippage.
 
         Prices stay in the LISTING currency (stops compare to local closes);
         cash impact, equity and realized PnL are converted to USD via fx_rate.
+
+        `reason` est enregistre tel quel dans trades.exit_reason: c'est la
+        seule trace du POURQUOI d'une sortie, et donc la base de toute
+        analyse de performance a posteriori.
         """
         px = reference_price or order.limit_price
         if px is None or px <= 0:
@@ -145,7 +150,7 @@ class PaperBroker:
                     " VALUES (:t, 'long', :q, :e, :x, :o, :c, :p, :r)"),
                     {"t": order.ticker, "q": order.qty, "e": avg, "x": fill,
                      "o": row[2] if row else None, "c": now, "p": pnl,
-                     "r": "signal"})
+                     "r": reason})
                 set_cash(cash + fill * order.qty * fx_rate)
 
             order.status = OrderStatus.FILLED
