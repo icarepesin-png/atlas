@@ -173,6 +173,21 @@ def run() -> dict:
                                  100 * max_sector)
                         qty = 0
                     if qty > 0:
+                        # Filet: `held` a ete lu en debut de run. Si une autre
+                        # execution a ouvert ce ticker entre-temps, acheter a
+                        # nouveau doublerait la position (cas GEN/FTNT du
+                        # 2026-08-08). On relit la base juste avant l'ordre.
+                        with engine.connect() as conn:
+                            deja = conn.execute(text(
+                                "SELECT qty FROM positions WHERE ticker=:t"),
+                                {"t": ticker}).fetchone()
+                        if deja:
+                            log.warning("skip %s: position deja ouverte "
+                                        "(x%.0f) par une autre execution",
+                                        ticker, float(deja[0]))
+                            held.add(ticker)
+                            qty = 0
+                    if qty > 0:
                         order = broker.submit_order(
                             Order(ticker, OrderSide.BUY, qty),
                             reference_price=open_px, fx_rate=fx, currency=cur)
