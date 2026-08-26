@@ -101,6 +101,27 @@ def run() -> dict:
                         f"🔴 <b>VENTE {ex['ticker']}</b> ×{ex['qty']:.0f} @ "
                         f"{order.filled_price:.2f}\n"
                         f"     <i>{ex['reason']}</i>{pnl_txt}")
+            elif ex["side"] == "sell_partial":
+                cur = currency_of(ex["ticker"])
+                order = broker.submit_order(
+                    Order(ex["ticker"], OrderSide.SELL, ex["qty"],
+                          OrderType.MARKET),
+                    reference_price=ex["price"],
+                    fx_rate=rates.get(cur, 1.0), currency=cur,
+                    reason=ex["reason"])
+                if order.status.value == "filled":
+                    with engine.begin() as conn:
+                        conn.execute(text(
+                            "UPDATE positions SET tp1_done=1 WHERE ticker=:t"),
+                            {"t": ex["ticker"]})
+                    summary["prises_partielles"] =                         summary.get("prises_partielles", 0) + 1
+                    pnl = _last_trade_pnl(engine, ex["ticker"])
+                    pnl_txt = (f" · P&amp;L {pnl:+,.0f} USD".replace(",", " ")
+                               if pnl is not None else "")
+                    changes.append(
+                        f"🎯 <b>PRISE PARTIELLE {ex['ticker']}</b> ×"
+                        f"{ex['qty']:.0f} @ {order.filled_price:.2f}\n"
+                        f"     <i>{ex['reason']}</i>{pnl_txt}")
             elif ex["side"] == "update_stop":
                 with engine.begin() as conn:
                     conn.execute(text(
