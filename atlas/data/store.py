@@ -129,6 +129,7 @@ def init_db(engine: Engine | None = None) -> Engine:
         for migration in (
             "ALTER TABLE positions ADD COLUMN currency TEXT DEFAULT 'USD'",
             "ALTER TABLE positions ADD COLUMN fx_entry REAL DEFAULT 1.0",
+            "ALTER TABLE positions ADD COLUMN tp1_done INTEGER DEFAULT 0",
         ):
             try:
                 conn.execute(text(migration))
