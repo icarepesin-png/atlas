@@ -128,6 +128,8 @@ def check_exits(positions: pd.DataFrame, prices: dict[str, pd.DataFrame]) -> lis
     """
     cfg = get_config().signals
     trail_mult = float(cfg.get("trailing_atr_multiple", 3.0))
+    tp_r = cfg.get("take_profit_r", [1.5, 2.5, 4.0])
+    part_tp1 = float(cfg.get("take_profit_part", 1 / 3))
     exits = []
     for _, pos in positions.iterrows():
         df = prices.get(pos["ticker"])
@@ -143,7 +145,22 @@ def check_exits(positions: pd.DataFrame, prices: dict[str, pd.DataFrame]) -> lis
         anchor_high = (float(since_entry["high"].max()) if len(since_entry)
                        else float(df["high"].iloc[-1]))
         new_trail = anchor_high - trail_mult * float(atr(df).iloc[-1])
+        # Prise partielle au premier objectif. R = distance entree-stop
+        # initial, la meme unite de risque que celle qui a dimensionne la
+        # position. 13 trades sur 39 ont touche cet objectif sans jamais
+        # l'encaisser, faute d'etre implemente.
         stop_initial = float(pos.get("stop") or 0)
+        entree = float(pos.get("avg_price") or 0)
+        R = entree - stop_initial
+        if (not int(pos.get("tp1_done") or 0)) and R > 0 and tp_r:
+            cible = entree + float(tp_r[0]) * R
+            if last >= cible:
+                part = max(1.0, round(float(pos["qty"]) * part_tp1))
+                if part < float(pos["qty"]):
+                    exits.append({"ticker": pos["ticker"], "side": "sell_partial",
+                                  "qty": part, "price": last,
+                                  "reason": f"objectif {tp_r[0]}R atteint"})
+                    continue
         effective_stop = max(stop_initial,
                              float(pos.get("trailing_stop") or 0), new_trail)
         if last <= effective_stop:
