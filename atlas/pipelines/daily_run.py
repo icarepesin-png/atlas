@@ -65,6 +65,15 @@ def main() -> None:
     )
     health: dict = {"started": _now(), "status": "error", "error": None}
     exit_code = 0
+    # Un seul run a la fois: deux rattrapages simultanes ont deja provoque
+    # des achats en double (voir atlas/pipelines/lock.py).
+    from atlas.pipelines.lock import DejaEnCours, run_lock
+    try:
+        verrou = run_lock("atlas-run")
+        verrou.__enter__()
+    except DejaEnCours as exc:
+        log.warning("run ignore: %s", exc)
+        raise SystemExit(0)
     try:
         from atlas.pipelines import daily_scan, paper_trade
 
@@ -103,6 +112,7 @@ def main() -> None:
             send(format_run_summary(health))
         except Exception as exc:
             log.warning("notification telegram echouee: %s", exc)
+        verrou.__exit__(None, None, None)
     raise SystemExit(exit_code)
 
 
