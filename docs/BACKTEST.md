@@ -141,3 +141,54 @@ parmi d'autres.
 
 Ce que la mesure etablit malgre le biais: le systeme n'a aucun avantage
 DEMONTRE a ce jour, ni par le technique, ni par le fondamental.
+
+## Correction du biais du survivant (2026-08-27, second temps)
+
+L'univers a ete reconstitue trimestre par trimestre depuis les revisions de la
+page Wikipedia "List of S&P 500 companies" (gratuit, `atlas/universe/
+historique.py`). Resultat: **880 titres ont appartenu a l'indice entre 2010 et
+2026, dont 376 absents de l'univers actuel** - 43%. Yahoo a rendu 138 de ces
+376 series; les autres, surtout des societes rachetees ou renommees
+(Activision, Alexion, Anthem), ne sont plus servies sous leur ancien symbole.
+La correction est donc PARTIELLE: environ un tiers des disparus recuperes.
+
+### Preuve que le biais fabriquait les resultats
+
+Meme mesure, deux univers (`scripts/comparer_biais_survivant.py`):
+
+| Facteur temoin | Univers biaise | Univers corrige |
+|----------------|----------------|-----------------|
+| Volatilite faible | -0.063 (t = **-1.94**) | -0.013 (t = -0.38) |
+| Momentum 12-1 | +0.005 (t = +0.26) | -0.003 (t = -0.12) |
+
+La "prime a la volatilite", qui n'a aucun sens economique, s'effondre des qu'on
+rend a l'echantillon une partie de ses perdants. Le diagnostic est confirme:
+c'etait l'echantillon qui mentait. Le momentum, lui, reste nul dans les deux
+cas - la neutralisation du pilier technique reste donc justifiee.
+
+### Le pilier fondamental, mesure proprement
+
+| Facteur | Biaise (63j) | Corrige (63j) |
+|---------|--------------|---------------|
+| PER | +0.015 | **+0.025** |
+| Price/Sales | +0.042 | +0.032 |
+| Rendement du cash-flow libre | +0.021 | **+0.024** |
+| ROE | +0.003 | **+0.018** |
+| ROIC | +0.009 | **+0.021** |
+| Croissance du chiffre d'affaires | -0.002 | -0.009 |
+| Croissance du BPA | -0.006 | -0.011 |
+| **Score agrege** | **+0.000** (t=+0.03) | **+0.013** (t=+0.87) |
+
+Trois enseignements:
+
+1. **La correction ameliore tout dans le bon sens.** Ce n'est pas un hasard de
+   mesure: les facteurs redeviennent coherents avec la litterature.
+2. **La VALEUR est la seule famille qui ressort** (PER, Price/Sales, cash-flow:
+   +0.024 a +0.032, zone "faible mais exploitable"). La QUALITE est marginale
+   (+0.01 a +0.02) et la CROISSANCE est negative.
+3. **Le score agrege reste sans avantage demontre** (t = +0.87, tres loin du
+   seuil de 2). Melanger valeur, qualite et croissance dans une seule note
+   dilue le seul signal qui fonctionne.
+
+Piste que ces chiffres designent: un score centre sur la VALEUR, plutot que le
+melange actuel a poids egaux. A tester, pas a decreter.
