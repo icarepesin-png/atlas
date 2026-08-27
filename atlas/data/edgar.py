@@ -168,7 +168,7 @@ def extraire(brut: dict, ticker: str) -> pd.DataFrame:
     gaap = (brut.get("facts") or {}).get("us-gaap", {})
     lignes = []
     for grandeur, candidats in CONCEPTS.items():
-        for concept in candidats:
+        for rang, concept in enumerate(candidats):
             bloc = gaap.get(concept)
             if not bloc:
                 continue
@@ -182,6 +182,7 @@ def extraire(brut: dict, ticker: str) -> pd.DataFrame:
                         "ticker": ticker,
                         "grandeur": grandeur,
                         "concept": concept,
+                        "priorite": rang,
                         "debut": f.get("start"),
                         "fin": f.get("end"),
                         "valeur": float(f["val"]),
@@ -190,7 +191,12 @@ def extraire(brut: dict, ticker: str) -> pd.DataFrame:
                         "exercice": f.get("fy"),
                         "periode": f.get("fp"),
                     })
-            break  # premier concept disponible: les suivants sont des replis
+            # PAS de break: on collecte TOUS les intitules candidats. La
+            # norme comptable change (ASC 606 en 2018 a remplace `Revenues`
+            # par `RevenueFromContractWithCustomer...`), donc s'arreter au
+            # premier trouve perdait tout l'historique anterieur - Micron et
+            # Apple n'avaient plus aucune marge avant 2018. `priorite`
+            # departage ensuite, periode par periode.
     if not lignes:
         return pd.DataFrame()
     df = pd.DataFrame(lignes)
@@ -226,7 +232,10 @@ def connu_au(df: pd.DataFrame, as_of: date | str,
         return vu
     # Derniere periode connue, et parmi les depots la version deposee en
     # premier (la publication d'origine, pas une reformulation ulterieure).
-    vu = vu.sort_values(["grandeur", "fin", "depot"])
+    tri = ["grandeur", "fin"] + (["priorite"] if "priorite" in vu.columns else [])
+    vu = vu.sort_values(tri + ["depot"])
+    # last() sur (grandeur, fin) croissant = periode la plus recente; la
+    # priorite ayant ete triee en amont, le concept de reference l'emporte.
     return vu.groupby("grandeur", as_index=False).last()
 
 
