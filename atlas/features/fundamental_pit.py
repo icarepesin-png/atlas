@@ -52,25 +52,52 @@ def _ratio(numerateur: float | None, denominateur: float | None) -> float | None
     return numerateur / denominateur
 
 
+JOURS_EXERCICE = (300, 400)   # duree plausible d'un exercice annuel
+
+
+def _est_annuel(debut, fin) -> bool:
+    """Periode de douze mois environ. Sans date de debut, c'est un solde de
+    bilan (actif, capitaux propres): instantane, donc toujours valable."""
+    if pd.isna(debut):
+        return True
+    jours = (fin - debut).days
+    return JOURS_EXERCICE[0] <= jours <= JOURS_EXERCICE[1]
+
+
 def photo_annuelle(faits: pd.DataFrame, as_of: date | str,
                    rang: int = 0) -> pd.DataFrame:
     """Exercice annuel connu a `as_of`. rang=1 donne le precedent.
 
-    Sert a la croissance: comparer deux exercices dont les DEUX etaient
-    publies a la date consideree.
+    PIEGE MAJEUR: un depot 10-K contient aussi les TRIMESTRES de l'exercice.
+    Se contenter de la periode la plus recente comparait l'annee 2018 de
+    Micron (30,4 Md USD) a son seul trimestre de mai (7,8 Md), soit une
+    croissance affichee de +290%. On ne retient donc que les periodes dont la
+    duree est celle d'un exercice; les soldes de bilan, qui n'ont pas de date
+    de debut, sont conserves tels quels.
     """
     if faits.empty:
         return faits
     vus = faits[(faits["depot"] <= pd.Timestamp(as_of))
-                & (faits["formulaire"].isin(FORMULAIRES_ANNUELS))]
+                & (faits["formulaire"].isin(FORMULAIRES_ANNUELS))].copy()
     if vus.empty:
         return vus
-    exercices = sorted(vus["fin"].unique())
-    if len(exercices) <= rang:
+    debut = vus["debut"] if "debut" in vus.columns else pd.Series(pd.NaT, index=vus.index)
+    vus["_annuel"] = [_est_annuel(d, f) for d, f in zip(debut, vus["fin"])]
+    vus = vus[vus["_annuel"]]
+    if vus.empty:
+        return vus
+
+    # Les cloture d'exercice sont les dates portant un FLUX annuel; un bilan
+    # seul ne suffit pas a identifier une fin d'exercice.
+    flux = vus[debut.reindex(vus.index).notna()] if "debut" in vus.columns else vus
+    candidates = sorted(flux["fin"].unique()) if not flux.empty         else sorted(vus["fin"].unique())
+    if len(candidates) <= rang:
         return vus.iloc[0:0]
-    cible = exercices[-1 - rang]
-    lot = vus[vus["fin"] == cible].sort_values("depot")
-    return lot.groupby("grandeur", as_index=False).first()
+    cible = candidates[-1 - rang]
+
+    lot = vus[vus["fin"] == cible]
+    tri = ([c for c in ("priorite",) if c in lot.columns]) + ["depot"]
+    return lot.sort_values(tri).groupby("grandeur", as_index=False).first()
 
 
 def ratios_au(faits: pd.DataFrame, as_of: date | str,

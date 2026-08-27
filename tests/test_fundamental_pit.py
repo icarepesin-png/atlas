@@ -15,9 +15,11 @@ from atlas.features.fundamental_pit import photo_annuelle, ratios_au
 
 
 def _faits(lignes):
+    """Meme conversion que `edgar.extraire`: les trois dates sont typees."""
     df = pd.DataFrame(lignes)
-    for col in ("fin", "depot"):
-        df[col] = pd.to_datetime(df[col])
+    for col in ("debut", "fin", "depot"):
+        if col in df.columns:
+            df[col] = pd.to_datetime(df[col], errors="coerce")
     return df
 
 
@@ -134,3 +136,49 @@ def test_pe_sur_perte_est_none():
 def test_photo_vide_sur_table_vide():
     assert photo_annuelle(pd.DataFrame(), "2025-01-01").empty
     assert ratios_au(pd.DataFrame(), "2025-01-01") == {}
+
+
+# -- le piege des trimestres caches dans un depot annuel -----------------------
+
+def _periode(debut, fin, depot, form="10-K", **grandeurs):
+    return [{"ticker": "X", "grandeur": g, "valeur": float(v), "fin": fin,
+             "debut": debut, "depot": depot, "formulaire": form, "concept": g,
+             "exercice": int(fin[:4]), "periode": "FY"}
+            for g, v in grandeurs.items()]
+
+
+@pytest.fixture
+def depot_annuel_avec_trimestres():
+    """Un 10-K reel contient l'exercice ET ses trimestres.
+
+    Cas Micron: comparer l'annee au dernier trimestre affichait +290% de
+    croissance au lieu de +49%.
+    """
+    return _faits(
+        _periode("2016-09-02", "2017-08-31", "2018-10-15", revenue=20322.0)
+        + _periode("2017-09-01", "2018-08-30", "2018-10-15", revenue=30391.0)
+        + _periode("2018-03-02", "2018-05-31", "2018-10-15", revenue=7797.0)
+        + _periode("2018-06-01", "2018-08-30", "2018-10-15", revenue=8440.0))
+
+
+def test_trimestre_du_depot_annuel_ignore(depot_annuel_avec_trimestres):
+    photo = photo_annuelle(depot_annuel_avec_trimestres, "2019-06-30")
+    assert photo[photo.grandeur == "revenue"].valeur.iloc[0] == 30391.0
+
+
+def test_croissance_compare_deux_exercices(depot_annuel_avec_trimestres):
+    r = ratios_au(depot_annuel_avec_trimestres, "2019-06-30")
+    assert r["revenue_growth"] == pytest.approx(30391.0 / 20322.0 - 1, abs=1e-6)
+    assert r["revenue_growth"] < 0.6, "croissance aberrante: trimestre compare a une annee"
+
+
+def test_solde_de_bilan_sans_date_de_debut_conserve():
+    """Actif et capitaux propres sont des instantanes: pas de date de debut,
+    donc pas de filtre de duree a leur appliquer."""
+    faits = _faits(_periode(None, "2024-12-31", "2025-02-20", revenue=1000.0)
+                   + [{"ticker": "X", "grandeur": "assets", "valeur": 5000.0,
+                       "fin": "2024-12-31", "debut": None,
+                       "depot": "2025-02-20", "formulaire": "10-K",
+                       "concept": "Assets", "exercice": 2024, "periode": "FY"}])
+    photo = photo_annuelle(faits, "2025-03-01")
+    assert "assets" in set(photo.grandeur)
