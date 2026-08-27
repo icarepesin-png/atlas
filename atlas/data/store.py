@@ -86,6 +86,15 @@ CREATE TABLE IF NOT EXISTS backtests (
     metrics TEXT,
     equity_curve TEXT
 );
+CREATE TABLE IF NOT EXISTS campagnes (
+    id INTEGER PRIMARY KEY,
+    nom TEXT NOT NULL,
+    debut TEXT NOT NULL,
+    fin TEXT,
+    capital_initial REAL,
+    equity_finale REAL,
+    note TEXT
+);
 CREATE TABLE IF NOT EXISTS factor_performance (
     as_of_date TEXT NOT NULL,
     factor TEXT NOT NULL,
@@ -130,6 +139,12 @@ def init_db(engine: Engine | None = None) -> Engine:
             "ALTER TABLE positions ADD COLUMN currency TEXT DEFAULT 'USD'",
             "ALTER TABLE positions ADD COLUMN fx_entry REAL DEFAULT 1.0",
             "ALTER TABLE positions ADD COLUMN tp1_done INTEGER DEFAULT 0",
+            # Campagnes de test: changer de strategie en cours de route rend
+            # les statistiques illisibles si tout est melange. On numerote les
+            # periodes au lieu d'effacer l'historique.
+            "ALTER TABLE trades ADD COLUMN campagne INTEGER DEFAULT 1",
+            "ALTER TABLE orders ADD COLUMN campagne INTEGER DEFAULT 1",
+            "ALTER TABLE paper_equity ADD COLUMN campagne INTEGER DEFAULT 1",
         ):
             try:
                 conn.execute(text(migration))
@@ -217,6 +232,23 @@ def get_ohlcv_batch_cached(tickers: list[str], provider, start=None, end=None,
                 if not cached.empty:
                     prices[t] = cached
     return prices
+
+
+def campagne_courante(engine: Engine | None = None) -> int:
+    """Numero de la campagne de test en cours (1 si aucune n'est declaree).
+
+    Une campagne = une periode ou la strategie n'a pas change. Changer les
+    ponderations en cours de route et melanger les trades avant/apres rend
+    toute statistique ininterpretable; on numerote donc plutot que d'effacer.
+    """
+    engine = engine or get_engine()
+    try:
+        with engine.connect() as conn:
+            n = conn.execute(text(
+                "SELECT MAX(id) FROM campagnes WHERE fin IS NULL")).scalar()
+        return int(n) if n else 1
+    except Exception:
+        return 1
 
 
 # -- SQL writers --------------------------------------------------------------
