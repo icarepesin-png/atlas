@@ -401,6 +401,26 @@ with tab_pf:
     st.subheader("Portefeuille (paper)")
     positions = load("positions")
     trades = load("trades")
+
+    # Une campagne = une periode ou la strategie n'a pas change. Melanger les
+    # trades d'avant et d'apres un changement de ponderation donnerait un taux
+    # de reussite qui ne veut rien dire.
+    campagnes = load("campagnes")
+    camp = 1
+    if not campagnes.empty:
+        ouvertes = campagnes[campagnes["fin"].isna()]
+        camp = int((ouvertes if not ouvertes.empty else campagnes)["id"].max())
+    if "campagne" in trades.columns and camp > 1:
+        trades = trades[trades["campagne"].fillna(1).astype(int) == camp]
+        closes = campagnes[campagnes["fin"].notna()]
+        if not closes.empty:
+            precedente = closes.iloc[-1]
+            st.caption(
+                f"Campagne {camp} en cours. La precedente s'est terminee a "
+                f"{float(precedente.get('equity_finale') or 0):,.0f} USD "
+                f"({precedente.get('note', '')}). Son historique est conserve "
+                "en base, il n'est simplement pas melange aux chiffres "
+                "ci-dessous.")
     # Courbe recalculee si disponible: jusqu'au 2026-08-26, l'equity du soir
     # etait recopiee de la veille un jour sur deux (cache de cours perime), et
     # les jours PC eteint manquaient purement. paper_equity_recalc rejoue les
@@ -410,8 +430,13 @@ with tab_pf:
         equity_hist = load("paper_equity")
     except Exception:
         equity_hist = pd.DataFrame()
+    if "campagne" in equity_hist.columns and camp > 1:
+        equity_hist = equity_hist[
+            equity_hist["campagne"].fillna(1).astype(int) == camp]
     try:
-        recalc = load("paper_equity_recalc")
+        # La courbe recalculee ne couvre que la campagne 1 (elle rejoue tous
+        # les ordres passes): ne pas la servir aux campagnes suivantes.
+        recalc = load("paper_equity_recalc") if camp == 1 else pd.DataFrame()
         if not recalc.empty and len(recalc) >= len(equity_hist):
             equity_hist = recalc[["date", "equity"]]
             equity_corrigee = True
