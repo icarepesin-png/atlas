@@ -7,9 +7,11 @@ Role: surveiller le systeme depuis l'exterieur, car les alertes locales
 1. FRAICHEUR DES DONNEES: la table paper_equity de Neon doit avoir une entree
    recente. Si plus de 2 jours ouvres manquent (tolerance pour les jours
    feries), c'est que le PC n'a pas fait tourner le run -> alerte Telegram.
-2. SANTE DU DASHBOARD CLOUD: la page Streamlit doit repondre sans "Oh no".
-   Si elle est plantee -> alerte + demande de redeploiement (commit vide
-   pousse par le workflow, ce qui force Streamlit a reconstruire l'app).
+2. SANTE DU DASHBOARD CLOUD: verifiee via /healthz, pas via la page d'accueil
+   (une coquille JavaScript qui renvoie 200 meme app en veille ou derriere un
+   ecran de connexion). Si l'app est plantee -> alerte + demande de
+   redeploiement (commit vide pousse par le workflow, ce qui force Streamlit
+   a reconstruire l'app).
 
 Zero dependance au code atlas (script autonome): requests + psycopg2 suffisent.
 Variables d'environnement requises (GitHub Secrets):
@@ -107,6 +109,20 @@ def check_data_freshness() -> tuple[bool, str]:
 
 
 def check_app_alive() -> tuple[bool, str]:
+    """Le dashboard repond-il VRAIMENT ?
+
+    Attention au piege: la page d'accueil est une coquille chargee en
+    JavaScript. Elle renvoie 200 et un HTML identique que l'app tourne, soit
+    en veille, soit derriere un ecran de connexion - chercher "Oh no" dedans
+    ne prouve donc rien. L'endpoint /healthz, lui, ne repond "ok" que si le
+    serveur Streamlit sert reellement l'application.
+    """
+    try:
+        r = requests.get(APP_URL + "/healthz", timeout=30)
+        if r.status_code != 200 or "ok" not in r.text.lower():
+            return False, f"healthz: HTTP {r.status_code} ({r.text[:40]})"
+    except Exception as exc:
+        return False, f"healthz injoignable: {type(exc).__name__}"
     try:
         r = requests.get(APP_URL, timeout=45)
         body = r.text.lower()
