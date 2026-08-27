@@ -20,13 +20,47 @@ def test_renormalization_without_macro_sentiment():
 
 
 def test_full_pillars_weighting():
+    """La ponderation doit suivre la config, sans valeur codee en dur.
+
+    L'ancienne version figeait 0.75/0.25: elle est tombee en panne le jour ou
+    les poids ont change (audit du 2026-08-26). On recalcule desormais
+    l'attendu a partir de la config elle-meme: c'est la MECANIQUE de
+    ponderation qu'on teste, pas un jeu de poids particulier.
+    """
+    from atlas.config import get_config
+
+    w = get_config().scoring_weights.normalized()
     f = pd.Series({"A": 80.0})
     t = pd.Series({"A": 80.0})
     s = pd.Series({"A": 80.0})
     df = composite_score(fundamental=f, technical=t, sector=s,
                          macro=50.0, sentiment=pd.Series({"A": 50.0}))
-    # 0.75 * 80 + 0.25 * 50 = 72.5
-    assert df.loc["A", "composite"] == pytest.approx(72.5, abs=0.1)
+    attendu = (80.0 * (w["fundamental"] + w["technical"] + w["sector"])
+               + 50.0 * (w["macro"] + w["sentiment"]))
+    assert df.loc["A", "composite"] == pytest.approx(attendu, abs=0.1)
+
+
+def test_pilier_technique_neutralise():
+    """Verrou: le pilier technique ne doit plus peser sur le classement.
+
+    Mesure du 2026-08-26 sur 2010-2026: IC de -0.008, et le top 10% de ce
+    score fait PIRE que l'univers entier. Si quelqu'un lui redonne un poids,
+    ce test tombe et oblige a justifier le choix.
+    """
+    from atlas.config import get_config
+
+    assert get_config().scoring_weights.normalized()["technical"] == 0.0
+
+    idx = ["A", "B", "C"]
+    f = pd.Series([90.0, 60.0, 30.0], index=idx)
+    sec = pd.Series([90.0, 60.0, 30.0], index=idx)
+    fort = pd.Series([95.0, 95.0, 95.0], index=idx)
+    faible = pd.Series([5.0, 5.0, 5.0], index=idx)
+    a = composite_score(f, fort, sec, macro=80.0,
+                        sentiment=pd.Series(50.0, index=idx))
+    b = composite_score(f, faible, sec, macro=80.0,
+                        sentiment=pd.Series(50.0, index=idx))
+    assert (a["composite"].sort_index() == b["composite"].sort_index()).all()
 
 
 def test_fundamental_score_spreads_to_percentiles():
