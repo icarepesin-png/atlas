@@ -405,7 +405,12 @@ with tab_pf:
     # Une campagne = une periode ou la strategie n'a pas change. Melanger les
     # trades d'avant et d'apres un changement de ponderation donnerait un taux
     # de reussite qui ne veut rien dire.
-    campagnes = load("campagnes")
+    # Table absente (base d'avant le mecanisme, ou synchro cloud pas encore
+    # passee): on retombe sur la campagne 1 plutot que de casser la page.
+    try:
+        campagnes = load("campagnes")
+    except Exception:
+        campagnes = pd.DataFrame()
     camp = 1
     if not campagnes.empty:
         ouvertes = campagnes[campagnes["fin"].isna()]
