@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import logging
 import math
-from datetime import date
+from datetime import date, timedelta
 
 import pandas as pd
 from sqlalchemy import text
@@ -53,6 +53,28 @@ def _last_trade_pnl(engine, ticker: str) -> float | None:
             "SELECT pnl FROM trades WHERE ticker=:t ORDER BY id DESC LIMIT 1"),
             {"t": ticker}).fetchone()
     return float(row[0]) if row and row[0] is not None else None
+
+
+def _en_carence(engine, jours: int) -> dict[str, str]:
+    """Titres sortis en perte trop recemment pour etre rachetes.
+
+    Le systeme rachetait volontiers un titre qui venait de le stopper: sur les
+    39 premiers trades, 8 titres re-trades concentraient 72% des pertes. Une
+    sortie perdante est une these qui a echoue; la racheter quelques jours plus
+    tard, c'est rejouer la meme these sans element nouveau.
+    """
+    if jours <= 0:
+        return {}
+    limite = (date.today() - timedelta(days=jours)).isoformat()
+    with engine.connect() as conn:
+        rows = conn.execute(text(
+            "SELECT ticker, MAX(closed_at) FROM trades"
+            " WHERE pnl < 0 AND closed_at >= :limite"
+            # Une vente de reparation (doublon d'execution) n'est pas une
+            # these qui echoue: elle ne doit pas bloquer le titre.
+            " AND COALESCE(exit_reason, '') NOT LIKE 'correction:%'"
+            " GROUP BY ticker"), {"limite": limite}).fetchall()
+    return {r[0]: str(r[1])[:10] for r in rows}
 
 
 def _marks_usd(tickers, rates: dict[str, float]) -> dict[str, float]:
@@ -135,6 +157,10 @@ def run() -> dict:
     positions = read_table("positions")
     held = set(positions["ticker"]) if not positions.empty else set()
     max_pos = int(cfg.get("max_positions", 25))
+    carence = _en_carence(engine, int(cfg.get("cooldown_days", 0)))
+    if carence:
+        log.info("carence: %d titre(s) non rachetables (%s)", len(carence),
+                 ", ".join(sorted(carence)[:8]))
     max_sector = float(cfg.get("max_weight_per_sector", 0.25))
     macro_series = fetch_macro_series()
     modifier = detect_regime(macro_series).exposure_modifier if macro_series else 1.0
@@ -183,7 +209,11 @@ def run() -> dict:
                 entry_usd = open_px * fx
                 stop_usd = float(sig["stop"]) * fx
                 sec = sector_of.get(ticker, "Unknown")
-                if ticker not in held and len(held) < max_pos \
+                if ticker in carence:
+                    log.info("skip %s: sortie perdante le %s, carence de %s j",
+                             ticker, carence[ticker], cfg.get("cooldown_days"))
+                    summary["carence"] = summary.get("carence", 0) + 1
+                elif ticker not in held and len(held) < max_pos \
                         and entry_usd > stop_usd:
                     qty = risk_based_size(equity, entry_usd, stop_usd, modifier)
                     cand_value = qty * entry_usd
