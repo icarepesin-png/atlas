@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from sqlalchemy import text
 
 from atlas.config import get_config
-from atlas.data.store import init_db
+from atlas.data.store import campagne_courante, init_db
 from atlas.execution.base import (Broker, BrokerPosition, Order, OrderSide,
                                   OrderStatus)
 
@@ -95,6 +95,10 @@ class PaperBroker:
             return order
 
         now = datetime.now(timezone.utc).isoformat()
+        # Lu AVANT la transaction: ouvrir une 2e connexion pendant qu'une
+        # transaction d'ecriture est en cours bloque SQLite (meme piege que
+        # celui deja documente plus bas).
+        camp = campagne_courante(self.engine)
         # IMPORTANT: tout (positions, trades, cash, ordre) dans UNE transaction.
         # Ouvrir une 2e connexion pendant qu'une transaction d'ecriture est
         # ouverte bloque SQLite ("database is locked").
@@ -146,23 +150,24 @@ class PaperBroker:
                                  {"q": remaining, "t": order.ticker})
                 conn.execute(text(
                     "INSERT INTO trades (ticker, side, qty, entry_price, exit_price,"
-                    " opened_at, closed_at, pnl, exit_reason)"
-                    " VALUES (:t, 'long', :q, :e, :x, :o, :c, :p, :r)"),
+                    " opened_at, closed_at, pnl, exit_reason, campagne)"
+                    " VALUES (:t, 'long', :q, :e, :x, :o, :c, :p, :r, :camp)"),
                     {"t": order.ticker, "q": order.qty, "e": avg, "x": fill,
                      "o": row[2] if row else None, "c": now, "p": pnl,
-                     "r": reason})
+                     "r": reason, "camp": camp})
                 set_cash(cash + fill * order.qty * fx_rate)
 
             order.status = OrderStatus.FILLED
             order.filled_price = round(fill, 4)
             conn.execute(text(
                 "INSERT INTO orders (created_at, ticker, side, qty, order_type,"
-                " limit_price, status, broker, filled_price, filled_at)"
-                " VALUES (:c, :t, :s, :q, :ot, :lp, :st, 'paper', :fp, :fa)"),
+                " limit_price, status, broker, filled_price, filled_at, campagne)"
+                " VALUES (:c, :t, :s, :q, :ot, :lp, :st, 'paper', :fp, :fa, :camp)"),
                 {"c": order.created_at, "t": order.ticker, "s": order.side.value,
                  "q": order.qty, "ot": order.order_type.value,
                  "lp": order.limit_price, "st": order.status.value,
-                 "fp": order.filled_price, "fa": now})
+                 "fp": order.filled_price, "fa": now,
+                 "camp": camp})
         log.info("paper fill %s %s x%.0f @ %.2f", order.side.value,
                  order.ticker, order.qty, fill)
         return order
