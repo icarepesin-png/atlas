@@ -323,7 +323,8 @@ def save_backtest(name: str, params: dict, metrics: dict,
 
 ALLOWED_TABLES = {"scores", "signals", "orders", "positions", "trades",
                   "backtests", "factor_performance", "paper_equity",
-                  "paper_equity_recalc", "paper_account", "sentiment_scores"}
+                  "paper_equity_recalc", "paper_account", "sentiment_scores",
+                  "campagnes"}
 
 
 def read_table(table: str, engine: Engine | None = None) -> pd.DataFrame:

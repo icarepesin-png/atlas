@@ -30,7 +30,7 @@ log = logging.getLogger(__name__)
 # Tables poussees vers le cloud (lues par le dashboard)
 SYNC_TABLES = ["signals", "positions", "trades", "paper_equity",
                "paper_equity_recalc", "paper_account", "sentiment_scores",
-               "backtests"]
+               "backtests", "campagnes"]
 
 
 def cloud_url() -> str | None:
