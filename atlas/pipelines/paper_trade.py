@@ -25,7 +25,8 @@ from sqlalchemy import text
 from atlas.config import get_config
 from atlas.data.fred import fetch_macro_series
 from atlas.data.fx import currency_of, get_usd_rates, to_usd
-from atlas.data.store import init_db, load_ohlcv, read_table
+from atlas.data.store import (campagne_courante, init_db,
+                              load_ohlcv, read_table)
 from atlas.execution.base import Order, OrderSide, OrderType
 from atlas.execution.paper import PaperBroker
 from atlas.features.regime import detect_regime
@@ -276,8 +277,9 @@ def run() -> dict:
             "CREATE TABLE IF NOT EXISTS paper_equity"
             " (date TEXT PRIMARY KEY, equity REAL)"))
         conn.execute(text(
-            "INSERT OR REPLACE INTO paper_equity (date, equity) VALUES (:d, :e)"),
-            {"d": today, "e": equity})
+            "INSERT OR REPLACE INTO paper_equity (date, equity, campagne)"
+            " VALUES (:d, :e, :camp)"),
+            {"d": today, "e": equity, "camp": campagne_courante(engine)})
         rows = conn.execute(text(
             "SELECT date, equity FROM paper_equity ORDER BY date")).fetchall()
     eq_curve = pd.Series({pd.Timestamp(r[0]): float(r[1]) for r in rows})
