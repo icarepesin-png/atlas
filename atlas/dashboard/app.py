@@ -359,7 +359,7 @@ with tab_watch:
                 ["ticker", "societe", "composite", "fundamental", "technical",
                  "sector", "sentiment", "sector_name", "country"]
             ],
-            use_container_width=True, hide_index=True, height=520,
+            width="stretch", hide_index=True, height=520,
             column_config={
                 "ticker": st.column_config.TextColumn("Titre"),
                 "societe": st.column_config.TextColumn("Societe", width="medium"),
@@ -384,7 +384,7 @@ with tab_signals:
                 ["as_of_date", "ticker", "side", "entry", "stop",
                  "tp1", "tp2", "tp3", "composite_score", "confidence", "status"]
             ],
-            use_container_width=True, hide_index=True,
+            width="stretch", hide_index=True,
             column_config={
                 "as_of_date": st.column_config.TextColumn("Date"),
                 "ticker": st.column_config.TextColumn("Titre"),
@@ -536,7 +536,7 @@ with tab_pf:
             _pnl_color,
             subset=["P&L latent (USD)", "PnL assure (USD)", "P&L %"])
         st.dataframe(
-            styled, use_container_width=True, hide_index=True,
+            styled, width="stretch", hide_index=True,
             column_config={
                 "Societe": st.column_config.TextColumn("Societe", width="medium"),
                 "Qte": st.column_config.NumberColumn(format="%.0f"),
@@ -625,7 +625,7 @@ with tab_pf:
         if lignes:
             cal_df = (pd.DataFrame(lignes).sort_values(["_d", "Place"])
                       .drop(columns="_d").head(20))
-            st.dataframe(cal_df, use_container_width=True, hide_index=True)
+            st.dataframe(cal_df, width="stretch", hide_index=True)
         st.caption("Chaque place a son propre calendrier: le 4 juillet ne ferme "
                    "que New York, le lundi de Paques ne ferme pas New York. "
                    "Un titre dont la place est fermee garde son dernier cours, "
@@ -640,7 +640,7 @@ with tab_pf:
             fill="tozeroy", fillcolor="rgba(79,209,165,0.07)"))
         fig_eq.update_yaxes(range=[min(eq.min() * 0.995, 99_000),
                                    max(eq.max() * 1.005, 101_000)])
-        st.plotly_chart(style_fig(fig_eq, 300), use_container_width=True)
+        st.plotly_chart(style_fig(fig_eq, 300), width="stretch")
     elif not equity_hist.empty:
         st.caption("La courbe de capital apparaitra a partir du deuxieme "
                    "jour de donnees.")
@@ -654,7 +654,7 @@ with tab_pf:
         if "currency" in view.columns:
             view["currency"] = view["currency"].fillna("USD")
         st.dataframe(
-            clean_nan(view), use_container_width=True, hide_index=True,
+            clean_nan(view), width="stretch", hide_index=True,
             column_config={
                 "ticker": st.column_config.TextColumn("Titre"),
                 "qty": st.column_config.NumberColumn("Quantite", format="%.0f"),
@@ -674,7 +674,7 @@ with tab_pf:
         if "closed_at" in tview.columns:
             tview["closed_at"] = tview["closed_at"].astype(str).str[:10]
         st.dataframe(
-            clean_nan(tview), use_container_width=True, hide_index=True,
+            clean_nan(tview), width="stretch", hide_index=True,
             column_config={
                 "ticker": st.column_config.TextColumn("Titre"),
                 "qty": st.column_config.NumberColumn("Quantite", format="%.0f"),
@@ -705,7 +705,7 @@ with tab_sectors:
                          color_continuous_scale="RdYlGn", range_color=[30, 90])
         fig.update_traces(marker=dict(cornerradius=6),
                           textfont=dict(size=14))
-        st.plotly_chart(style_fig(fig, 480), use_container_width=True)
+        st.plotly_chart(style_fig(fig, 480), width="stretch")
 
 with tab_bt:
     st.subheader("Backtests")
@@ -732,14 +732,14 @@ with tab_bt:
         fig = go.Figure(go.Scatter(x=eq.index, y=eq.values, name="equity",
                                    line=dict(color=AMBER, width=2)))
         fig.update_layout(title="Courbe de capital")
-        st.plotly_chart(style_fig(fig, 380), use_container_width=True)
+        st.plotly_chart(style_fig(fig, 380), width="stretch")
         dd = (1 - eq / eq.cummax()) * -100
         fig2 = go.Figure(go.Scatter(
             x=eq.index, y=dd.values, fill="tozeroy", name="drawdown",
             line=dict(color=CRIMSON, width=1.5),
             fillcolor="rgba(227,93,106,0.15)"))
         fig2.update_layout(title="Drawdown (%)")
-        st.plotly_chart(style_fig(fig2, 240), use_container_width=True)
+        st.plotly_chart(style_fig(fig2, 240), width="stretch")
 
 with tab_risk:
     st.subheader("Risque en temps reel")
@@ -758,16 +758,16 @@ with tab_risk:
             fig = px.pie(values=sector_w.values, names=sector_w.index,
                          title="Exposition sectorielle", hole=0.45,
                          color_discrete_sequence=PIE_PALETTE)
-            c1.plotly_chart(style_fig(fig, 360), use_container_width=True)
+            c1.plotly_chart(style_fig(fig, 360), width="stretch")
             country_w = value.groupby(merged["country"].fillna("Unknown")).sum()
             fig2 = px.pie(values=country_w.values, names=country_w.index,
                           title="Exposition geographique", hole=0.45,
                           color_discrete_sequence=PIE_PALETTE[::-1])
-            c2.plotly_chart(style_fig(fig2, 360), use_container_width=True)
+            c2.plotly_chart(style_fig(fig2, 360), width="stretch")
         rcols = [c for c in ["ticker", "qty", "avg_price", "currency",
                              "stop", "trailing_stop"] if c in positions.columns]
         st.dataframe(clean_nan(positions[rcols].copy()),
-                     use_container_width=True, hide_index=True,
+                     width="stretch", hide_index=True,
                      column_config={
                          "ticker": st.column_config.TextColumn("Titre"),
                          "qty": st.column_config.NumberColumn("Quantite", format="%.0f"),

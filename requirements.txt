@@ -34,7 +34,7 @@ uvicorn[standard]>=0.27
 
 # Dashboard
 streamlit==1.58.0; python_version >= "3.14"
-streamlit>=1.32,<2; python_version < "3.14"
+streamlit>=1.58,<2; python_version < "3.14"   # width= remplace use_container_width
 plotly==6.8.0; python_version >= "3.14"
 plotly>=5.18,<8; python_version < "3.14"
 altair==6.2.1; python_version >= "3.14"
