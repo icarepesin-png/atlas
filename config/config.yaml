@@ -14,21 +14,42 @@ data:
   fundamentals_provider: yahoo    # yahoo | fmp | edgar
 
 scoring:
-  # Ponderations du score composite (somme = 1.0). Mises a jour par le module learning
-  # uniquement apres validation humaine (voir learning/feedback.py).
+  # Ponderations du score composite (renormalisees automatiquement).
+  #
+  # REVISION DU 2026-08-27, apres l'audit du 26 aout (docs/BACKTEST.md):
+  # - technical 0.25 -> 0. IC de -0.008 mesure sur 2010-2026 (841 mesures
+  #   hebdomadaires, 534 titres): ce pilier n'a JAMAIS eu de pouvoir predictif.
+  #   Le top 10% de son score rend 1.31% a 21 seances contre 1.48% pour
+  #   l'univers entier (t = -2.23). Acheter le haut de ce score fait donc
+  #   legerement pire que le hasard.
+  # - macro 0.15 -> 0 et sentiment 0.10 -> 0: ces deux piliers valent la MEME
+  #   valeur pour tous les titres (80 et 50). Ils ne participaient donc pas au
+  #   classement, ils ne faisaient que diluer les piliers qui, eux, separent
+  #   les titres. Le pilier macro garde tout son role ailleurs: il pilote
+  #   l'exposition globale via detect_regime().exposure_modifier.
+  # - le poids libere va au fondamental (seul IC positif mesure: +0.094) et au
+  #   secteur. Combinaison la plus performante sur les donnees reelles:
+  #   top 5% a +3.88% contre +2.67% pour l'univers.
   weights:
-    fundamental: 0.35
-    technical: 0.25
-    macro: 0.15
-    sector: 0.15
-    sentiment: 0.10
+    fundamental: 0.70
+    technical: 0.0
+    macro: 0.0
+    sector: 0.30
+    sentiment: 0.0
   winsorize_pct: 0.02             # ecretage des outliers avant z-score
   sector_neutral: true            # ranking intra-secteur pour les facteurs fondamentaux
 
 signals:
-  min_composite_score: 85
+  # Seuil recalibre le 2026-08-27 EN MEME TEMPS que les ponderations, pour
+  # conserver la MEME selectivite (2.8 signaux/jour en moyenne sur 47 scans).
+  # Retirer macro et sentiment, figes pour tous les titres, etale la
+  # distribution vers le haut: un meme titre obtient un composite plus eleve
+  # sans etre meilleur. 85 aurait laisse passer 37 signaux par jour.
+  # Ce n'est donc pas un assouplissement, c'est la meme exigence dans une
+  # nouvelle echelle.
+  min_composite_score: 96
   min_fundamental_score: 80
-  min_technical_score: 80
+  min_technical_score: 0     # 80 -> 0: filtre desactive avec le pilier (audit du 26/08)
   min_sector_score: 70
   stop_atr_multiple: 2.0
   trailing_atr_multiple: 2.75    # 3.0 -> 2.75: stop suiveur un peu plus serre (verrouille plus de gains)
@@ -37,6 +58,11 @@ signals:
   atr_period: 14
 
 portfolio:
+  # Delai de carence apres une sortie perdante sur un titre (2026-08-27).
+  # Les 8 titres rachetes apres une perte pesaient -3 921 USD, soit 72% de la
+  # perte totale: WDC traite 5 fois, EOG 4 fois, SNDK et STX 3 fois. Le
+  # systeme rachetait ce qui venait de le faire sortir.
+  cooldown_days: 20
   method: volatility_targeting    # equal_weight | inverse_vol | volatility_targeting | hrp
   target_volatility: 0.12         # vol annualisee cible du portefeuille
   max_positions: 25
