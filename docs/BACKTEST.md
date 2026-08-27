@@ -92,3 +92,52 @@ periode), observations chevauchantes, et 274 points seulement au-dessus du
 seuil 85. Un momentum puni pendant un trimestre n'est pas un momentum mort.
 Ce qui est solide, c'est que le signal technique a ete negatif **chaque jour**
 mesure: on ne peut pas continuer a l'acheter sans decision explicite.
+
+## Mesure du pilier fondamental point-in-time (2026-08-27)
+
+Grace aux depots EDGAR (1 037 193 faits, 510 societes, 2006-2026), le pilier
+fondamental a enfin pu etre mesure sans look-ahead: a chaque date, chaque titre
+est note avec les comptes REELLEMENT publies ce jour-la.
+
+Score fondamental agrege, 66 dates trimestrielles de 2010 a 2026:
+
+| Horizon | IC moyen | Positif | t |
+|---------|----------|---------|---|
+| 21 seances | -0.003 | 44% du temps | -0.30 |
+| 63 seances | +0.000 | 46% du temps | +0.03 |
+
+Par facteur, seuls ceux de VALEUR sortent legerement du bruit et dans le bon
+sens: fcf_yield (+0.014 / +0.021), pe (+0.019 / +0.015), ps (+0.009 / +0.042).
+Les facteurs de QUALITE sont neutres ou negatifs: roe (-0.012 / +0.003),
+marges operationnelles (-0.021 / -0.044).
+
+### Le test temoin, et pourquoi il interdit de conclure
+
+Avant d'en tirer que "le fondamental ne marche pas", on a mesure sur le MEME
+univers deux facteurs dont l'effet est documente depuis des decennies:
+
+| Facteur temoin | IC 21j | IC 63j | t (63j) |
+|----------------|--------|--------|---------|
+| Momentum 12-1 mois | -0.013 | +0.003 | +0.15 |
+| Volatilite faible | -0.052 | -0.064 | **-1.96** |
+
+Le momentum, effet le plus replique de la litterature academique, ressort NUL
+lui aussi. Et la volatilite ressort franchement inversee: sur cet univers, plus
+un titre est volatil, mieux il a performe.
+
+Ce dernier point est la signature du BIAIS DU SURVIVANT. L'univers est
+constitue des membres ACTUELS du S&P 500, c'est-a-dire des societes qui ont
+reussi. Les titres volatils qui ont explose a la hausse y sont; ceux qui ont
+coule en sont sortis et n'y figurent pas. Mecaniquement, "volatil = gagnant"
+et les facteurs de qualite et de valeur perdent leur pouvoir, puisque les
+pieges de valorisation qu'ils servaient a eviter ont disparu de l'echantillon.
+
+CONCLUSION: ces mesures ne permettent PAS de conclure que le pilier fondamental
+est sans valeur. Elles montrent qu'aucun facteur, pas meme les plus etablis,
+n'est mesurable sur un univers biaise par le survivant. La correction de ce
+biais (constituants historiques des indices, phase 2.2 de la feuille de route)
+devient donc le prealable a toute conclusion, et non plus une amelioration
+parmi d'autres.
+
+Ce que la mesure etablit malgre le biais: le systeme n'a aucun avantage
+DEMONTRE a ce jour, ni par le technique, ni par le fondamental.
