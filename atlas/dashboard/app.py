@@ -192,6 +192,9 @@ def carte_place(p: dict) -> str:
     """Carte compacte d'une place: pastille, heure locale, etat, echeance."""
     bord = "#2e9e6b" if p["ouvert"] else "#3a3f4b"
     detail = p["ferie"] or p["echeance"]
+    detenus = p.get("detenus", 0)
+    detail_titres = (f"<b>{detenus} detenu(s)</b> sur {p['titres']}"
+                     if detenus else f"{p['titres']} surveille(s)")
     return (
         f"<div style='border:1px solid {bord};border-left:4px solid {bord};"
         "border-radius:8px;padding:10px 12px;margin-bottom:8px;'>"
@@ -201,8 +204,41 @@ def carte_place(p: dict) -> str:
         f"{p['heure']}</div>"
         f"<div style='font-size:0.78rem;opacity:0.75;'>{p['etat']} · "
         f"{detail}</div>"
-        f"<div style='font-size:0.78rem;opacity:0.55;'>{p['titres']} titre(s) · "
+        f"<div style='font-size:0.78rem;opacity:0.55;'>{detail_titres} · "
         f"{p['devise']}</div></div>")
+
+
+def places_suivies() -> tuple[list[dict], str]:
+    """Toutes les places de l'univers surveille, avec ce qu'on y detient.
+
+    L'etat des marches ne depend PAS du portefeuille: savoir que New York
+    ouvre dans deux heures interesse autant quand on detient 20 titres que
+    quand le portefeuille est vide. On affiche donc systematiquement les
+    places de l'univers scanne, en indiquant sur chacune combien de titres y
+    sont detenus.
+    """
+    try:
+        sc = read_table_raw("scores")
+        if sc.empty:
+            return [], ""
+        dernier = sc[sc["as_of_date"] == sc["as_of_date"].max()]
+        places = market_rows(list(dernier["ticker"]))
+        try:
+            pos = read_table_raw("positions")
+            detenus = list(pos["ticker"]) if not pos.empty else []
+        except Exception:  # noqa: BLE001
+            detenus = []
+        from atlas.data.markets import market_of
+
+        compte: dict[str, int] = {}
+        for t in detenus:
+            code = market_of(t).code
+            compte[code] = compte.get(code, 0) + 1
+        for pl in places:
+            pl["detenus"] = compte.get(pl["code"], 0)
+        return places, "surveille(s)"
+    except Exception:  # noqa: BLE001
+        return [], ""
 
 
 def market_rows(tickers) -> list[dict]:
@@ -605,19 +641,30 @@ with tab_pf:
                    f"{now_paris().strftime('%H:%M:%S')} (Paris), "
                    f"auto toutes les 5 min.{tail}")
 
-        # --- Etat des places ou l'on detient des titres ---------------------
-        if not places:
-            return
-        st.markdown("##### Places de cotation")
-        cols = st.columns(min(len(places), 4) or 1)
-        for i, p in enumerate(places):
-            with cols[i % len(cols)]:
-                st.markdown(carte_place(p), unsafe_allow_html=True)
-        st.caption("Heure locale de chaque place. Une position ne bouge que "
-                   "pendant la seance de SA place: un titre de Paris est fige "
-                   "des 17h30, un titre de New York jusqu'a 15h30 (heure de Paris).")
-
     live_valuation()
+
+    # --- Etat des places de cotation ---------------------------------------
+    # Volontairement HORS du bloc de valorisation: celui-ci s'interrompt quand
+    # le portefeuille est vide, et l'etat des marches reste utile dans ce cas
+    # (savoir quand les signaux en attente pourront s'executer).
+    @st.fragment(run_every="60s")
+    def panneau_places():
+        places_p, _ = places_suivies()
+        if not places_p:
+            return
+        ouvertes = [pl for pl in places_p if pl["ouvert"]]
+        st.markdown("##### Places de cotation")
+        st.caption(f"{len(ouvertes)}/{len(places_p)} ouverte(s) · heure locale "
+                   "de chaque place")
+        cols = st.columns(min(len(places_p), 4) or 1)
+        for i, pl in enumerate(places_p):
+            with cols[i % len(cols)]:
+                st.markdown(carte_place(pl), unsafe_allow_html=True)
+        st.caption("Un titre ne bouge que pendant la seance de SA place: un "
+                   "titre de Paris est fige des 17h30, un titre de New York "
+                   "jusqu'a 22h (heures de Paris).")
+
+    panneau_places()
 
     # --- Calendrier des fermetures, toutes places confondues ---------------
     with st.expander("Calendrier des fermetures (toutes les places)"):
@@ -626,13 +673,7 @@ with tab_pf:
         from atlas.data.markets import market_by_code, upcoming_holidays
 
         today_d = _date.today()
-        # Recalcul: `places` vit dans le fragment de valorisation.
-        pos_cal = read_table_raw("positions")
-        try:
-            places = (market_rows(list(pos_cal["ticker"]))
-                      if not pos_cal.empty else [])
-        except Exception:  # noqa: BLE001
-            places = []
+        places, _ = places_suivies()
         codes = [p["code"] for p in places] or ["US"]
         jours = {0: "lundi", 1: "mardi", 2: "mercredi", 3: "jeudi",
                  4: "vendredi", 5: "samedi", 6: "dimanche"}
