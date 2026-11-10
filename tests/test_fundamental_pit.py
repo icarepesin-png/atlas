@@ -182,3 +182,63 @@ def test_solde_de_bilan_sans_date_de_debut_conserve():
                        "concept": "Assets", "exercice": 2024, "periode": "FY"}])
     photo = photo_annuelle(faits, "2025-03-01")
     assert "assets" in set(photo.grandeur)
+
+
+# -- acces rapide: il doit donner EXACTEMENT les memes chiffres ----------------
+
+from atlas.features.fundamental_pit import (composantes_connues,  # noqa: E402
+                                            ratios_depuis, table_depots)
+
+
+def test_escalier_equivalent_au_calcul_direct(societe):
+    """La table de depots est une optimisation, pas une autre methode: a
+    n'importe quelle date elle doit redonner ce que calcule `ratios_au`."""
+    marches = table_depots(societe)
+    for jour in ("2024-02-15", "2024-06-30", "2025-02-19", "2025-02-20",
+                 "2025-03-01", "2025-08-01"):
+        rapide = ratios_depuis(composantes_connues(marches, jour), cours=30.0)
+        direct = ratios_au(societe, jour, cours=30.0)
+        assert rapide == direct, jour
+
+
+def test_escalier_vide_avant_le_premier_depot(societe):
+    assert composantes_connues(table_depots(societe), "2020-01-01") == {}
+
+
+def test_escalier_ignore_les_trimestres(societe):
+    """Le 10-Q de juillet 2025 ne cree pas de marche."""
+    depots = [str(d.date()) for d, _ in table_depots(societe)]
+    assert depots == ["2024-02-15", "2025-02-20"]
+
+
+def test_comptes_trop_anciens_ecartes(societe):
+    """Une societe muette depuis plus de 18 mois est sortie du radar: ses
+    derniers comptes ne decrivent plus rien (radiation, rachat)."""
+    marches = table_depots(societe)
+    assert composantes_connues(marches, "2026-01-01") != {}
+    assert composantes_connues(marches, "2027-06-01") == {}
+
+
+def test_rendement_beneficiaire_defini_meme_en_perte():
+    """Un PER negatif n'a pas de sens, un rendement negatif si: les societes
+    deficitaires restent classables au lieu de disparaitre du score valeur."""
+    faits = _faits(_exercice("2024-12-31", "2025-02-20", eps_diluted=-2.0,
+                             revenue=100.0, net_income=-50.0))
+    r = ratios_au(faits, "2025-03-01", cours=40.0)
+    assert r["pe"] is None
+    assert r["earnings_yield"] == pytest.approx(-2.0 / 40.0)
+
+
+def test_comparatif_republie_prefere_a_la_premiere_publication():
+    """Division par 4 entre deux exercices: le 10-K de l'annee republie le BPA
+    de l'annee precedente sur la nouvelle base (1,00 au lieu de 4,00). La
+    croissance doit comparer 1,50 a 1,00, pas 1,50 a 4,00."""
+    faits = _faits(
+        _exercice("2023-12-31", "2024-02-15", eps_diluted=4.0, revenue=100.0)
+        + _exercice("2024-12-31", "2025-02-20", eps_diluted=1.5, revenue=120.0)
+        # le meme depot de fevrier 2025 republie l'exercice 2023, base ajustee
+        + _exercice("2023-12-31", "2025-02-20", eps_diluted=1.0, revenue=100.0))
+    r = ratios_au(faits, "2025-03-01")
+    assert r["eps_growth"] == pytest.approx(1.5 / 1.0 - 1)
+    # ... et avant ce depot, on ne connaissait que la publication d'origine
+    assert ratios_au(faits, "2024-06-30")["_exercice"] == "2023-12-31"
