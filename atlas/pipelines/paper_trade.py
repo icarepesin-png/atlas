@@ -25,6 +25,7 @@ from sqlalchemy import text
 from atlas.config import get_config
 from atlas.data.fred import fetch_macro_series
 from atlas.data.fx import currency_of, get_usd_rates, to_usd
+from atlas.data.markets import seance_de_reference
 from atlas.data.store import (campagne_courante, init_db,
                               load_ohlcv, read_table)
 from atlas.execution.base import Order, OrderSide, OrderType
@@ -98,7 +99,12 @@ def run() -> dict:
     broker = PaperBroker()
     cfg = get_config().portfolio
     rates = get_usd_rates()
-    today = str(date.today())
+    # `today` = la seance traitee (derniere seance americaine close), pas la
+    # date du calendrier. Consequences voulues: un signal de mardi s'execute
+    # a l'ouverture de mercredi meme si mardi a ete traite en rattrapage le
+    # mercredi midi (il attendait jeudi auparavant), et le point d'equity
+    # porte la date de la cloture qu'il valorise.
+    today = str(seance_de_reference())
     summary: dict = {"sells": 0, "buys": 0, "trail_updates": 0,
                      "expired": 0, "pending": 0}
     changes: list[str] = []  # mouvements reels (ouverture/cloture) -> Telegram
@@ -315,7 +321,7 @@ def run() -> dict:
     if changes:
         try:
             from atlas.monitoring.notify import RULE, fmt_money, send
-            msg = (f"🔔 <b>ATLAS · Mouvements du {today}</b>\n{RULE}\n"
+            msg = (f"🔔 <b>ATLAS · Séance du {today}</b>\n{RULE}\n"
                    + "\n\n".join(changes)
                    + f"\n{RULE}\n"
                    f"💼 Equity : <b>{fmt_money(equity)} USD</b> · "
