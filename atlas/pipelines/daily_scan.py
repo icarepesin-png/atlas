@@ -22,6 +22,7 @@ from datetime import date, timedelta
 import pandas as pd
 
 from atlas.config import get_config
+from atlas.data.markets import seance_de_reference
 from atlas.data.store import (get_ohlcv_batch_cached, init_db, save_scores,
                               save_signals)
 from atlas.data.yahoo import YahooProvider
@@ -94,7 +95,10 @@ def run(limit: int | None = None, refresh_universe: bool = False) -> dict:
     init_db()
     cfg = get_config()
     provider = YahooProvider()
-    as_of = str(date.today())
+    # Le scan est date par la SEANCE qu'il analyse (derniere seance americaine
+    # close), pas par le jour ou il tourne: un rattrapage du mercredi midi
+    # travaille sur les clotures de mardi et doit s'appeler "mardi".
+    as_of = str(seance_de_reference())
     start = str(date.today() - timedelta(days=365 * int(cfg.data.get("history_years", 25))))
 
     # 1. Universe + prices (batch download, cache-first)
