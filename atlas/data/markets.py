@@ -299,6 +299,33 @@ def last_expected_session(m: Market, now: datetime | None = None) -> date:
     return d
 
 
+def seance_de_reference(now: datetime | None = None) -> date:
+    """La seance que traite un run: la derniere seance AMERICAINE close.
+
+    Tout le systeme se cale dessus (date du scan, des signaux, du point
+    d'equity) au lieu de la date du calendrier. Raison: le PC n'est presque
+    jamais allume a 23h, ce sont les rattrapages qui tournent, a midi, a 18h
+    ou le samedi. En datant par le calendrier, la campagne 2 a produit 6
+    points d'equity dates d'un week-end, 5 doublons, et des signaux executes
+    avec un jour de retard apres chaque rattrapage. Date par la seance, un run
+    donne le meme resultat quelle que soit l'heure a laquelle il tourne.
+    """
+    return last_expected_session(_US, now)
+
+
+def seance_attendue(ticker: str, now: datetime | None = None) -> date:
+    """Derniere barre qu'un titre doit (et peut) avoir pour le run en cours.
+
+    C'est le minimum entre la derniere seance close de SA place et la seance
+    de reference. Le second terme evite un regard vers l'avenir discret: a
+    18h heure de Paris, Paris a cloture mais New York cote encore; utiliser la
+    barre parisienne du jour pour un scan date de la veille reviendrait a
+    noter un titre avec une cloture posterieure a son prix d'execution.
+    """
+    return min(last_expected_session(market_of(ticker), now),
+               seance_de_reference(now))
+
+
 def next_open(m: Market, now: datetime | None = None) -> datetime:
     """Prochaine ouverture (heure locale de la place, tz-aware)."""
     local = (now or datetime.now(m.zone())).astimezone(m.zone())
