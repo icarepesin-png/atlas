@@ -18,7 +18,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 
 from atlas.config import get_config, get_settings
-from atlas.data.markets import last_expected_session, market_of
+from atlas.data.markets import seance_attendue
 
 log = logging.getLogger(__name__)
 
@@ -161,7 +161,27 @@ def cache_path(ticker: str) -> str:
     return str(get_config().cache_dir / f"{safe}.parquet")
 
 
-def save_ohlcv(ticker: str, df: pd.DataFrame) -> None:
+def sans_barre_incomplete(ticker: str, df: pd.DataFrame,
+                          now=None) -> pd.DataFrame:
+    """Retire les barres des seances qui ne sont pas encore closes.
+
+    Yahoo renvoie la barre du jour EN COURS de seance: son "close" n'est alors
+    que le dernier cours cote. Un run lance pendant la seance americaine (6 des
+    19 jours d'activite de la campagne 2) prenait ce cours pour une cloture,
+    evaluait les stops dessus, et la barre partielle restait en cache: le
+    critere de fraicheur la voyait datee du jour et ne la retelechargeait
+    plus. FICO a ainsi ete vendu a 613,51 a 19h05 pour une cloture a 617,87.
+    """
+    if df is None or df.empty:
+        return df
+    limite = pd.Timestamp(seance_attendue(ticker, now))
+    return df[pd.DatetimeIndex(df.index).normalize() <= limite]
+
+
+def save_ohlcv(ticker: str, df: pd.DataFrame, now=None) -> None:
+    """Ecrit le cache. Seules les seances closes y entrent, jamais une barre
+    en cours de formation (voir `sans_barre_incomplete`)."""
+    df = sans_barre_incomplete(ticker, df, now)
     if df is not None and not df.empty:
         df.to_parquet(cache_path(ticker))
 
@@ -189,8 +209,7 @@ def is_cache_fresh(ticker: str, df: pd.DataFrame | None = None,
         df = load_ohlcv(ticker)
     if df is None or df.empty:
         return False
-    attendue = last_expected_session(market_of(ticker), now)
-    return df.index.max().date() >= attendue
+    return df.index.max().date() >= seance_attendue(ticker, now)
 
 
 def get_ohlcv_cached(ticker: str, provider, start=None, end=None,
@@ -199,9 +218,10 @@ def get_ohlcv_cached(ticker: str, provider, start=None, end=None,
     df = load_ohlcv(ticker)
     if is_cache_fresh(ticker, df, now):
         return df
-    fresh = provider.get_ohlcv(ticker, start=start, end=end)
+    fresh = sans_barre_incomplete(
+        ticker, provider.get_ohlcv(ticker, start=start, end=end), now)
     if not fresh.empty:
-        save_ohlcv(ticker, fresh)
+        save_ohlcv(ticker, fresh, now)
         return fresh
     return df  # stale cache better than nothing
 
@@ -223,9 +243,9 @@ def get_ohlcv_batch_cached(tickers: list[str], provider, start=None, end=None,
         log.info("batch refresh: %d/%d tickers a telecharger", len(stale), len(tickers))
         fresh = provider.get_ohlcv_batch(stale, start=start, end=end)
         for t in stale:
-            df = fresh.get(t, pd.DataFrame())
+            df = sans_barre_incomplete(t, fresh.get(t, pd.DataFrame()), now)
             if df is not None and not df.empty:
-                save_ohlcv(t, df)
+                save_ohlcv(t, df, now)
                 prices[t] = df
             else:
                 cached = load_ohlcv(t)
