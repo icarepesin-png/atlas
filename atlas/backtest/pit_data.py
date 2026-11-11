@@ -278,6 +278,10 @@ def scores_familles(d: Donnees, min_facteurs: int = 2) -> dict[str, np.ndarray]:
         melange = num / den
     melange[den < 0.5] = np.nan
     out["melange_actuel"] = melange
+    # Le meme pilier sans la croissance, seule famille dont l'effet mesure
+    # est negatif. Les deux notes doivent exister: un titre sans comptes de
+    # valorisation n'est pas "moyen", il est inconnu.
+    out["qualite_valeur"] = (out["qualite"] + out["valeur"]) / 2
     return out
 
 
