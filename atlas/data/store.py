@@ -145,6 +145,9 @@ def init_db(engine: Engine | None = None) -> Engine:
             "ALTER TABLE trades ADD COLUMN campagne INTEGER DEFAULT 1",
             "ALTER TABLE orders ADD COLUMN campagne INTEGER DEFAULT 1",
             "ALTER TABLE paper_equity ADD COLUMN campagne INTEGER DEFAULT 1",
+            # Seance traitee par le run qui a passe l'ordre: permet de
+            # reconstruire l'equity sans dependre de l'heure d'execution.
+            "ALTER TABLE orders ADD COLUMN seance TEXT",
         ):
             try:
                 conn.execute(text(migration))
