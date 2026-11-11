@@ -68,7 +68,8 @@ class PaperBroker:
 
     def submit_order(self, order: Order, reference_price: float | None = None,
                      fx_rate: float = 1.0, currency: str = "USD",
-                     reason: str = "signal") -> Order:
+                     reason: str = "signal",
+                     seance: str | None = None) -> Order:
         """Immediate simulated fill at reference (or limit) price + slippage.
 
         Prices stay in the LISTING currency (stops compare to local closes);
@@ -161,13 +162,15 @@ class PaperBroker:
             order.filled_price = round(fill, 4)
             conn.execute(text(
                 "INSERT INTO orders (created_at, ticker, side, qty, order_type,"
-                " limit_price, status, broker, filled_price, filled_at, campagne)"
-                " VALUES (:c, :t, :s, :q, :ot, :lp, :st, 'paper', :fp, :fa, :camp)"),
+                " limit_price, status, broker, filled_price, filled_at, campagne,"
+                " seance)"
+                " VALUES (:c, :t, :s, :q, :ot, :lp, :st, 'paper', :fp, :fa, :camp,"
+                " :seance)"),
                 {"c": order.created_at, "t": order.ticker, "s": order.side.value,
                  "q": order.qty, "ot": order.order_type.value,
                  "lp": order.limit_price, "st": order.status.value,
                  "fp": order.filled_price, "fa": now,
-                 "camp": camp})
+                 "camp": camp, "seance": seance})
         log.info("paper fill %s %s x%.0f @ %.2f", order.side.value,
                  order.ticker, order.qty, fill)
         return order
