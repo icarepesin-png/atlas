@@ -849,3 +849,69 @@ with tab_risk:
                          "stop": MONEY("Stop"),
                          "trailing_stop": MONEY("Stop suiveur"),
                      })
+
+    # --- Les piliers du score predisent-ils ? (mesure nocturne) ------------
+    st.divider()
+    st.markdown("#### Les piliers du score predisent-ils ?")
+    try:
+        fp = load("factor_performance")
+    except Exception:
+        fp = pd.DataFrame()
+    if not fp.empty:
+        fp = fp.dropna(subset=["ic"])
+    if fp.empty:
+        st.info("Pas encore de mesure. Elle se construit nuit apres nuit: il "
+                "faut attendre que le rendement futur d'un scan soit connu.")
+    else:
+        from atlas.config import get_config
+
+        poids = get_config().scoring_weights.normalized()
+        libelles = {"fundamental": "Fondamental", "technical": "Technique",
+                    "sector": "Secteur", "macro": "Macro",
+                    "sentiment": "Sentiment"}
+        # moyenne des 20 dernieres mesures: un mois de bourse, assez pour
+        # lisser le bruit d'une nuit sans masquer un retournement
+        recent = (fp.sort_values("as_of_date")
+                  .groupby(["factor", "forward_days"]).tail(20))
+        moy = recent.groupby(["factor", "forward_days"])["ic"].agg(
+            ["mean", "count"]).reset_index()
+        lignes, alertes = [], []
+        for facteur, grp in moy.groupby("factor"):
+            par_h = {int(r.forward_days): r for r in grp.itertuples()}
+            ic21 = par_h[21].mean if 21 in par_h else None
+            w = float(poids.get(facteur, 0.0))
+            if ic21 is None:
+                lecture = "en attente"
+            elif ic21 > 0.03:
+                lecture = "predit dans le bon sens"
+            elif ic21 < -0.03:
+                lecture = "A L'ENVERS"
+            else:
+                lecture = "bruit"
+            if w > 0 and ic21 is not None and ic21 < -0.03:
+                alertes.append(libelles.get(facteur, facteur))
+            lignes.append({
+                "Pilier": libelles.get(facteur, facteur),
+                "Poids dans le score": f"{100 * w:.0f}%",
+                "IC 5 seances": par_h[5].mean if 5 in par_h else None,
+                "IC 10 seances": par_h[10].mean if 10 in par_h else None,
+                "IC 21 seances": ic21,
+                "Mesures": int(max(r.count for r in grp.itertuples())),
+                "Lecture (21 seances)": lecture,
+            })
+        for nom in alertes:
+            st.warning(f"Le pilier {nom} pese dans le score alors que son "
+                       "signal est a l'envers sur le dernier mois.")
+        st.dataframe(
+            pd.DataFrame(lignes).sort_values("Pilier"),
+            width="stretch", hide_index=True,
+            column_config={c: st.column_config.NumberColumn(c, format="%+.3f")
+                           for c in ("IC 5 seances", "IC 10 seances",
+                                     "IC 21 seances")})
+        st.caption(
+            "IC = correlation entre la note d'un pilier et ce que les titres "
+            "ont fait ensuite. Entre -0,03 et +0,03 c'est du bruit; au-dela "
+            "de +0,03 le pilier aide a choisir; en dessous de -0,03 il "
+            "choisit a l'envers. Moyenne des 20 dernieres nuits mesurables. "
+            "Un mois de mesures reste court: c'est un signal d'alarme, pas "
+            "une preuve.")
