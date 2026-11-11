@@ -96,6 +96,13 @@ def main() -> None:
         except Exception as exc:
             log.warning("suivi des facteurs echoue (non bloquant): %s", exc)
             health["facteurs"] = {"status": "error", "error": str(exc)}
+        # Qui garde le gardien ? Le workflow GitHub s'est deja eteint tout seul
+        # (regle des 60 jours d'inactivite) sans que rien ne le signale.
+        try:
+            from atlas.monitoring import gardien_cloud
+            health["gardien_cloud"] = gardien_cloud.etat()
+        except Exception as exc:
+            health["gardien_cloud"] = {"ok": None, "raison": str(exc)}
         # Courbe d'equity reconstruite depuis les ordres: comble les trous des
         # jours manques et efface les points dates d'un week-end.
         try:
