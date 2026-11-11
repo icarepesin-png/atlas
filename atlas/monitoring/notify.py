@@ -120,6 +120,14 @@ def format_run_summary(health: dict) -> str:
             f"{al.get('mesures')} nuits, poids "
             f"{100 * float(al.get('poids', 0)):.0f}%")
 
+    # Gardien cloud eteint ou muet: c'est le filet de securite, on le dit fort.
+    gardien = health.get("gardien_cloud") or {}
+    if gardien.get("ok") is False:
+        facteurs_line += (
+            f"\n   🔴 <b>Gardien cloud HORS SERVICE</b> : "
+            f"{_html.escape(str(gardien.get('raison', '?')))}\n"
+            f"   ➡️ Réactiver : {gardien.get('page', 'onglet Actions du dépôt')}")
+
     regime = str(scan.get("regime", "?"))
     regime_icon = {"expansion": "🌱", "recovery": "🌤️", "slowdown": "🌥️",
                    "recession": "🌧️", "neutral": "⚪"}.get(regime, "")
