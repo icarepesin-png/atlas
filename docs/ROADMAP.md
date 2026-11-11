@@ -2,6 +2,27 @@
 
 Etat au 2026-08-27, apres l'audit complet du 26 aout (voir docs/BACKTEST.md).
 
+> **Point d'etape du 2026-11-11.** Phases 0, 1.1, 2.1 et 2.2 realisees. La
+> phase 3 a sa reponse, et elle est negative: sur 2010-2026, une fois les
+> donnees assainies (biais du survivant reduit, divisions d'actions, comptes
+> complets), **aucune famille de facteurs ne fait mieux que des titres tires
+> au sort avec les memes regles de sortie**, et ces regles coutent environ
+> 0,25 de Sharpe par rapport a la simple detention de l'indice. Les criteres
+> ci-dessous ne sont pas atteints: la phase 4 (argent reel) reste fermee.
+> Detail dans docs/BACKTEST.md, section "Backtest fidele et erratum".
+>
+> Fait depuis aout: backtest fidele (`atlas/backtest/fidele.py`), univers
+> historique, comptes EDGAR dates, dates par seance (un run donne le meme
+> resultat a midi, 18h ou 23h), barres incompletes ecartees, courbe d'equity
+> recalculee par campagne, surveillance des piliers visible et alertee,
+> surveillance croisee du gardien cloud (GitHub l'avait desactive le
+> 2026-11-08 apres 60 jours d'inactivite du depot), constituants relus chaque
+> mois.
+>
+> Reste ouvert: reactiver le gardien (clic utilisateur), decider du sort de
+> la campagne 2 (investie a 10% seulement au seuil 96), source des
+> constituants du Nasdaq-100, app Streamlit toujours publique.
+
 ## Ou on en est vraiment
 
 | Domaine | Etat |
