@@ -192,3 +192,107 @@ Trois enseignements:
 
 Piste que ces chiffres designent: un score centre sur la VALEUR, plutot que le
 melange actuel a poids egaux. A tester, pas a decreter.
+
+## Backtest fidele et erratum (2026-11-11)
+
+### Erratum: les mesures "valeur" d'aout etaient fausses
+
+Les sections precedentes concluaient que la famille VALEUR ressortait comme
+"seule exploitable" (PER +0.025, cash-flow +0.024). **Cette conclusion est
+retiree.** Deux defauts la fabriquaient:
+
+1. **Regard vers l'avenir par les divisions d'actions.** Les cours du cache
+   sont ajustes de toutes les divisions, y compris posterieures a la date
+   etudiee, alors que les benefices par action EDGAR sont ceux publies a
+   l'epoque. Nvidia au 30 juin 2020: BPA publie 4,52, cours en cache 9,44 (au
+   lieu de ~380), soit un rendement beneficiaire calcule de 48% au lieu de
+   1,2%. Seules les actions qui ont beaucoup monte divisent leur titre: le
+   score "valeur" classait donc en tete, des annees a l'avance, les futurs
+   gagnants. Corrige par `atlas/data/prix_reels.py` (comptes ramenes sur la
+   base du cours, cours non ajuste des dividendes).
+2. **Historique comptable tronque.** L'extraction EDGAR d'origine s'arretait
+   au premier intitule comptable trouve; elle a ete corrigee en aout sans que
+   le fichier soit regenere. 42% des exercices n'avaient pas de chiffre
+   d'affaires (donc ni marges ni croissance avant 2019). Regenere le
+   2026-11-11: 1 595 868 faits, 641 societes.
+
+### Le backtest fidele
+
+`atlas/backtest/fidele.py` rejoue jour par jour les regles du paper trading
+(entree a l'ouverture suivante, sizing par le risque plafonne a 5%, stop 2
+ATR, suiveur 2,75 ATR, prise partielle a 1,5R, carence de 20 jours, titres
+radies soldes) sur l'univers historique du S&P 500 et les comptes dates
+(depot exploitable a J+1). Periode: 2010-04-01 -> 2026-11-10. Couverture des
+membres de l'indice: 83% en moyenne, 67% au plus bas.
+
+La question posee n'est pas "la strategie gagne-t-elle" (sur 16 ans de hausse,
+presque tout gagne) mais "la SELECTION fait-elle mieux que le hasard a regles
+de sortie identiques". Temoin: 20 tirages au sort, redessines chaque trimestre
+pour avoir la meme inertie qu'un score fondamental.
+
+Pouvoir predictif (IC mensuel, sans chevauchement a 21 seances):
+
+| Famille | IC 21j | t | IC 63j | t |
+|---------|--------|---|--------|---|
+| valeur | +0.000 | +0.00 | +0.005 | +0.41 |
+| qualite | +0.008 | +0.83 | +0.013 | +1.30 |
+| croissance | -0.002 | -0.19 | -0.009 | -0.86 |
+| melange actuel (Q45/C25/V30) | +0.006 | +0.67 | +0.010 | +1.21 |
+| qualite + valeur | +0.008 | +0.91 | +0.016 | +1.86 |
+
+Aucune famille n'atteint le seuil de signification.
+
+Ecart au hasard (z sur le Sharpe; z > 2 = la selection apporte quelque chose):
+
+| Selectivite | valeur | qualite | croissance | melange actuel | qualite+valeur |
+|-------------|--------|---------|------------|----------------|----------------|
+| 0,6% (reglage reel) | +0.9 | +1.0 | -0.5 | +1.1 | +0.0 |
+| 2% | +1.0 | +0.2 | -0.4 | -0.7 | -0.9 |
+| 5% | +2.0 | +2.2 | -0.6 | -1.2 | -0.6 |
+| 10% | +0.6 | -0.3 | -0.8 | -0.5 | -1.8 |
+
+Sur 20 comparaisons, deux atteignent z = 2 (valeur et qualite a 5%), ce que le
+hasard seul produit a peu pres une fois sur vingt; et leur combinaison au meme
+reglage est a -0.6. Les Sharpe par sous-periode changent de classement d'une
+periode a l'autre. **Conclusion: aucun avantage de selection demontre.**
+
+### Les regles de sortie, mesurees independamment du choix des titres
+
+Titres tires au hasard, 5% de l'indice, seules les sorties varient:
+
+| Regles | CAGR | Sharpe | Drawdown | Exposition |
+|--------|------|--------|----------|------------|
+| reelles (stop 2 / suiveur 2,75 / TP 1,5R) | +6.9% | 0.59 | -21.8% | 75% |
+| sans prise partielle | +7.2% | 0.58 | -23.3% | 81% |
+| sans carence | +9.4% | 0.64 | -34.9% | 88% |
+| stops serres (1,5 / 2) | +4.6% | 0.46 | -19.7% | 61% |
+| stops larges (3 / 4) | +9.3% | 0.70 | -25.6% | 88% |
+| stops tres larges (4 / 6) | +10.0% | 0.74 | -27.5% | 90% |
+| **SPY achete et conserve** | **+13.8%** | **0.84** | -34% | 100% |
+
+La relation est monotone: plus les stops sont serres, plus le resultat se
+degrade; plus ils sont larges, plus il se rapproche de la simple detention de
+l'indice, sans la rattraper. Les stops reduisent le drawdown (-22% contre
+-34%) mais coutent environ 0,25 de Sharpe et la moitie du rendement.
+
+### Ce que cela etablit
+
+1. La selection par score ne fait pas mieux que le hasard, sur 16 ans, une
+   fois les donnees assainies.
+2. Les regles de sortie actuelles coutent du rendement ajuste du risque par
+   rapport a la detention de l'indice.
+3. Au reglage reel (seuil 96, soit ~0,6% de l'indice), le portefeuille reste
+   investi a 10% environ: meme un avantage reel n'aurait pas la place de
+   s'exprimer. Ce seuil avait ete calibre le 2026-08-27 pour conserver le
+   NOMBRE DE SIGNAUX par jour; c'etait le mauvais invariant, les premiers d'un
+   classement fondamental restant les memes des semaines durant.
+
+Les criteres de la phase 3 de la feuille de route (IC > +0.03 stable, top du
+score battant l'univers, backtest fidele coherent avec le paper) ne sont pas
+atteints. La phase 4 (argent reel) reste fermee.
+
+Limites: deux tiers des societes sorties de l'indice n'ont plus de cours chez
+Yahoo (biais du survivant reduit, pas elimine; il favorise plutot les
+strategies testees que le temoin, donc ne remet pas en cause la conclusion);
+pas de plafond sectoriel ni de modulation macro dans le backtest; comptes
+annuels uniquement.
