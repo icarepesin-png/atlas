@@ -46,9 +46,18 @@ def brut():
 
 def test_user_agent_manquant_leve_une_erreur_explicite(monkeypatch):
     monkeypatch.delenv("SEC_USER_AGENT", raising=False)
+    monkeypatch.setattr("dotenv.dotenv_values", lambda *a, **k: {})
     with pytest.raises(SecUserAgentManquant) as e:
         entetes()
     assert "SEC_USER_AGENT" in str(e.value)
+
+
+def test_user_agent_lu_dans_le_fichier_env(monkeypatch):
+    """Un script lance a la main n'a pas charge le .env: on va le lire."""
+    monkeypatch.delenv("SEC_USER_AGENT", raising=False)
+    monkeypatch.setattr("dotenv.dotenv_values",
+                        lambda *a, **k: {"SEC_USER_AGENT": "ATLAS x@exemple.com"})
+    assert entetes()["User-Agent"] == "ATLAS x@exemple.com"
 
 
 def test_user_agent_sans_contact_est_refuse(monkeypatch):
