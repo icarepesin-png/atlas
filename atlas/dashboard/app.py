@@ -475,9 +475,11 @@ with tab_pf:
         equity_hist = equity_hist[
             equity_hist["campagne"].fillna(1).astype(int) == camp]
     try:
-        # La courbe recalculee ne couvre que la campagne 1 (elle rejoue tous
-        # les ordres passes): ne pas la servir aux campagnes suivantes.
-        recalc = load("paper_equity_recalc") if camp == 1 else pd.DataFrame()
+        recalc = load("paper_equity_recalc")
+        if "campagne" in recalc.columns:
+            recalc = recalc[recalc["campagne"].fillna(1).astype(int) == camp]
+        elif camp > 1:
+            recalc = pd.DataFrame()   # ancienne table: campagne 1 seulement
         if not recalc.empty and len(recalc) >= len(equity_hist):
             equity_hist = recalc[["date", "equity"]]
             equity_corrigee = True
@@ -502,8 +504,8 @@ with tab_pf:
                 delta_color="off")
     if equity_corrigee:
         st.caption("Courbe d'equity RECALCULEE a partir des ordres et des cours "
-                   "de cloture reels (l'ancienne recopiait la veille un jour "
-                   "sur deux, et sautait les jours PC eteint).")
+                   "de cloture: une valeur par seance, y compris les jours ou "
+                   "le PC etait eteint.")
     st.caption("Valeurs ci-dessus: figees au dernier run nocturne (23h)."
                + ("" if n_closed >= 20 else
                   f" Taux de reussite peu significatif ({n_closed} trades, "
