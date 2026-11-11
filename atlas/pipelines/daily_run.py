@@ -96,6 +96,14 @@ def main() -> None:
         except Exception as exc:
             log.warning("suivi des facteurs echoue (non bloquant): %s", exc)
             health["facteurs"] = {"status": "error", "error": str(exc)}
+        # Courbe d'equity reconstruite depuis les ordres: comble les trous des
+        # jours manques et efface les points dates d'un week-end.
+        try:
+            from atlas.pipelines import equity_recalc
+            health["equity_recalc"] = equity_recalc.run()
+        except Exception as exc:
+            log.warning("recalcul de l'equity echoue (non bloquant): %s", exc)
+            health["equity_recalc"] = {"status": "error", "error": str(exc)}
         # Pousse les donnees vers le cloud pour le dashboard heberge (si configure)
         try:
             from atlas.pipelines import sync_to_cloud
