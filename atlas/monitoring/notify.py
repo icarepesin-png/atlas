@@ -110,6 +110,16 @@ def format_run_summary(health: dict) -> str:
         arrow = "🟢" if pnl >= 0 else "🔴"
         pnl_line = f"   {arrow} {pnl:+,.0f}".replace(",", " ") + " depuis le départ\n"
 
+    # Un pilier qui pese dans le score avec un signal inverse doit se voir
+    # dans le rapport du soir, pas trois mois plus tard dans un audit.
+    facteurs_line = ""
+    for al in (health.get("facteurs") or {}).get("alertes") or []:
+        facteurs_line += (
+            f"\n   ⚠️ Pilier <b>{_html.escape(str(al.get('pilier')))}</b> à "
+            f"l'envers : IC {float(al.get('ic', 0)):+.3f} sur "
+            f"{al.get('mesures')} nuits, poids "
+            f"{100 * float(al.get('poids', 0)):.0f}%")
+
     regime = str(scan.get("regime", "?"))
     regime_icon = {"expansion": "🌱", "recovery": "🌤️", "slowdown": "🌥️",
                    "recession": "🌧️", "neutral": "⚪"}.get(regime, "")
@@ -129,6 +139,7 @@ def format_run_summary(health: dict) -> str:
         f"   ⏳ En attente : {paper.get('pending', 0)}   ⌛ Expirés : {paper.get('expired', 0)}\n\n"
         f"🛡️ <b>Risque</b>\n"
         f"   {risk_line}"
+        f"{facteurs_line}"
     )
 
 
