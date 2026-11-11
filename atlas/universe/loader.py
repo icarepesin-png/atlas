@@ -12,6 +12,7 @@ membership to kill survivorship bias (see docs/BACKTEST.md).
 from __future__ import annotations
 
 import logging
+import time
 from pathlib import Path
 
 import pandas as pd
@@ -58,10 +59,30 @@ def _csv_path(index_name: str) -> Path:
     return UNIVERSE_DIR / f"{index_name}.csv"
 
 
+AGE_MAX_JOURS = 30
+
+
+def _perime(path: Path, age_max_jours: int = AGE_MAX_JOURS) -> bool:
+    """Liste de constituants trop ancienne pour etre encore juste.
+
+    Un indice bouge: entre juin et novembre 2026 la liste n'avait jamais ete
+    relue, et le scan continuait de telecharger chaque nuit des titres sortis
+    de la cote (Electronic Arts, EchoStar) tout en ignorant les entrants.
+    """
+    age = (time.time() - path.stat().st_mtime) / 86400
+    return age > age_max_jours
+
+
 def load_index(index_name: str, refresh: bool = False) -> list[str]:
-    """Load constituents for one index, cache-first."""
+    """Load constituents for one index, cache-first.
+
+    Les indices scrapes sont relus automatiquement une fois par mois; en cas
+    d'echec du scrape, la liste en cache reste utilisee.
+    """
     path = _csv_path(index_name)
-    if path.exists() and not refresh:
+    a_relire = refresh or (index_name in _WIKI_SOURCES and path.exists()
+                           and _perime(path))
+    if path.exists() and not a_relire:
         return pd.read_csv(path)["ticker"].dropna().astype(str).tolist()
     if index_name in _WIKI_SOURCES:
         try:
