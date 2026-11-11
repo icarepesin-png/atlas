@@ -46,6 +46,35 @@ def _rendements(tickers, depart: pd.Timestamp, horizon: int) -> pd.Series:
     return pd.Series(out)
 
 
+SEUIL_ENVERS = -0.03     # en dessous, le pilier choisit a l'envers
+NUITS = 20               # un mois de bourse
+MESURES_MIN = 15         # pas d'alerte sur trois nuits de bruit
+
+
+def piliers_a_l_envers(horizon: int = 21) -> list[dict]:
+    """Piliers qui PESENT dans le score alors que leur signal est inverse.
+
+    C'est l'alerte qui a manque a l'ete 2026: le pilier technique portait 25%
+    du score avec un IC negatif nuit apres nuit, et personne ne le voyait.
+    """
+    from atlas.config import get_config
+
+    hist = read_table("factor_performance")
+    if hist.empty:
+        return []
+    hist = hist[(hist["forward_days"] == horizon)].dropna(subset=["ic"])
+    poids = get_config().scoring_weights.normalized()
+    alertes = []
+    for facteur, grp in hist.sort_values("as_of_date").groupby("factor"):
+        recent = grp.tail(NUITS)
+        w = float(poids.get(facteur, 0.0))
+        if w > 0 and len(recent) >= MESURES_MIN                 and recent["ic"].mean() < SEUIL_ENVERS:
+            alertes.append({"pilier": facteur, "poids": round(w, 2),
+                            "ic": round(float(recent["ic"].mean()), 3),
+                            "mesures": int(len(recent))})
+    return alertes
+
+
 def run(horizons=HORIZONS) -> dict:
     init_db()
     scores = read_table("scores")
@@ -82,6 +111,11 @@ def run(horizons=HORIZONS) -> dict:
                  ", ".join(f"{k}={v:+.3f}" for k, v in ic.items()))
         if pires:
             log.info("   piliers les plus faibles: %s", " | ".join(pires))
+    resume["alertes"] = piliers_a_l_envers()
+    for al in resume["alertes"]:
+        log.warning("pilier %s a l'envers: IC %+.3f sur %d nuits pour un poids"
+                    " de %.0f%%", al["pilier"], al["ic"], al["mesures"],
+                    100 * al["poids"])
     return resume
 
 
