@@ -80,6 +80,17 @@ class SecUserAgentManquant(RuntimeError):
 
 def entetes() -> dict[str, str]:
     ua = os.environ.get("SEC_USER_AGENT", "").strip()
+    if not ua:
+        # Les scripts lances a la main n'ont pas forcement charge le .env
+        try:
+            from dotenv import dotenv_values
+
+            from atlas.config import PROJECT_ROOT
+
+            ua = (dotenv_values(PROJECT_ROOT / ".env").get("SEC_USER_AGENT")
+                  or "").strip()
+        except Exception:  # noqa: BLE001
+            ua = ""
     if not ua or "@" not in ua:
         raise SecUserAgentManquant(
             "SEC_USER_AGENT absent ou sans adresse de contact. La SEC refuse "
