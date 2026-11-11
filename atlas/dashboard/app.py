@@ -138,6 +138,13 @@ def _health_banner():
         if HEALTH_FILE.exists():
             ok, msg = check()
             (st.success if ok else st.error)(msg)
+            sante = json.loads(HEALTH_FILE.read_text(encoding="utf-8"))
+            gardien = sante.get("gardien_cloud") or {}
+            if gardien.get("ok") is False:
+                st.error("Gardien cloud HORS SERVICE: "
+                         f"{gardien.get('raison', '?')}. Tant qu'il est eteint, "
+                         "personne ne t'alerte si le PC cesse de faire tourner "
+                         f"ATLAS. A reactiver ici: {gardien.get('page', '')}")
             return
     except Exception:
         pass
