@@ -51,3 +51,21 @@ jobs:
           git config user.email "watchdog@atlas.local"
           git commit --allow-empty -m "watchdog: redeploiement automatique du dashboard"
           git push
+
+      # GitHub DESACTIVE les workflows planifies d'un depot reste 60 jours sans
+      # activite. C'est arrive le 2026-11-08: le dernier commit datait du
+      # 2026-09-09, et le gardien s'est eteint en silence, sans alerte. Un
+      # commit vide suffit a remettre le compteur a zero (celui du 9 septembre
+      # l'avait deja fait une fois sans qu'on le sache).
+      - name: Garder le depot actif
+        if: always()
+        run: |
+          dernier=$(git log -1 --format=%ct)
+          age=$(( ( $(date +%s) - dernier ) / 86400 ))
+          echo "dernier commit il y a $age jours"
+          if [ "$age" -ge 40 ]; then
+            git config user.name "atlas-watchdog"
+            git config user.email "watchdog@atlas.local"
+            git commit --allow-empty -m "watchdog: maintien en activite du depot"
+            git push
+          fi
