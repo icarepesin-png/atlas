@@ -281,10 +281,28 @@ def scores_familles(d: Donnees, min_facteurs: int = 2) -> dict[str, np.ndarray]:
     return out
 
 
-def hasard(d: Donnees, graine: int) -> np.ndarray:
+def hasard(d: Donnees, graine: int, persistance: int = 63) -> np.ndarray:
     """Score tire au sort: le temoin. Toute strategie doit le battre, sinon
-    sa selection n'apporte rien de plus que les regles de sortie."""
+    sa selection n'apporte rien de plus que les regles de sortie.
+
+    `persistance` = nombre de seances pendant lesquelles un tirage reste
+    valable. Un score fondamental bouge lentement: ses premiers de classe
+    restent les memes des semaines durant, ce qui concentre le portefeuille
+    sur peu de noms. Un hasard retire chaque jour proposerait au contraire
+    des titres neufs en permanence et remplirait le portefeuille bien plus
+    vite: on comparerait alors deux expositions differentes, pas deux
+    selections. Un trimestre (63 seances) reproduit le rythme des comptes.
+    """
     rng = np.random.default_rng(graine)
-    s = rng.random(d.cloture.shape)
+    n, m = d.cloture.shape
+    blocs = rng.random((n // max(persistance, 1) + 1, m))
+    s = np.repeat(blocs, max(persistance, 1), axis=0)[:n].copy()
     s[~d.membre | np.isnan(d.cloture)] = np.nan
     return s
+
+
+def titres_historiques() -> list[str]:
+    """Tous les titres ayant appartenu a l'indice sur la periode couverte."""
+    f = _dossier_cache() / "univers_historique" / "compositions.json"
+    lots = json.loads(f.read_text(encoding="utf-8")).values()
+    return sorted(set().union(*map(set, lots)))
