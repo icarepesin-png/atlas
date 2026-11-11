@@ -72,7 +72,17 @@ def comptes_univers(rafraichir: bool = False) -> dict[str, list]:
         with cache.open("rb") as f:
             return pickle.load(f)
     log.info("construction des tables de depots (1 a 2 minutes)...")
-    comptes = construire_comptes(pd.read_parquet(faits))
+    table = pd.read_parquet(faits)
+    # L'extraction d'origine s'arretait au premier intitule comptable trouve
+    # et perdait tout l'historique d'avant 2018 (42% des exercices sans
+    # chiffre d'affaires). Corrigee en aout 2026... sans que le fichier soit
+    # regenere. Un fichier sans colonne `priorite` complete vient de la.
+    if "priorite" not in table.columns or table["priorite"].isna().any():
+        raise RuntimeError(
+            "faits_edgar.parquet a ete produit par l'ancienne extraction "
+            "(historique tronque). Relancer: python scripts/moisson_edgar.py "
+            "--forcer")
+    comptes = construire_comptes(table)
     with cache.open("wb") as f:
         pickle.dump(comptes, f)
     return comptes
