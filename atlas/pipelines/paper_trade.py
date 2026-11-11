@@ -120,7 +120,7 @@ def run() -> dict:
                     Order(ex["ticker"], OrderSide.SELL, ex["qty"], OrderType.MARKET),
                     reference_price=ex["price"],
                     fx_rate=rates.get(cur, 1.0), currency=cur,
-                    reason=ex["reason"])
+                    reason=ex["reason"], seance=today)
                 if order.status.value == "filled":
                     summary["sells"] += 1
                     pnl = _last_trade_pnl(engine, ex["ticker"])
@@ -137,7 +137,7 @@ def run() -> dict:
                           OrderType.MARKET),
                     reference_price=ex["price"],
                     fx_rate=rates.get(cur, 1.0), currency=cur,
-                    reason=ex["reason"])
+                    reason=ex["reason"], seance=today)
                 if order.status.value == "filled":
                     with engine.begin() as conn:
                         conn.execute(text(
@@ -249,7 +249,8 @@ def run() -> dict:
                     if qty > 0:
                         order = broker.submit_order(
                             Order(ticker, OrderSide.BUY, qty),
-                            reference_price=open_px, fx_rate=fx, currency=cur)
+                            reference_price=open_px, fx_rate=fx, currency=cur,
+                            seance=today)
                         if order.status.value == "filled":
                             with engine.begin() as conn:
                                 conn.execute(text(
