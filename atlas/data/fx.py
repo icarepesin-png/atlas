@@ -54,8 +54,10 @@ def get_usd_rates(provider=None) -> dict[str, float]:
             provider = YahooProvider()
         from atlas.data.store import get_ohlcv_batch_cached
         frames = get_ohlcv_batch_cached(list(FX_PAIRS.values()), provider,
+                                        # deux ans: le recalcul de l'equity
+                                        # rejoue des campagnes entieres
                                         start=str(pd.Timestamp.today().date()
-                                                  - pd.Timedelta(days=30)))
+                                                  - pd.Timedelta(days=730)))
         for cur, pair in FX_PAIRS.items():
             df = frames.get(pair, pd.DataFrame())
             if not df.empty:
