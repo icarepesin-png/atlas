@@ -45,7 +45,17 @@ def main() -> None:
         limite = int(sys.argv[sys.argv.index("--limite") + 1])
     max_age = 0 if "--forcer" in sys.argv else 30
 
-    univers = build_universe()[:limite] if limite else build_universe()
+    # Univers actuel + societes sorties de l'indice dont on a les cours: sans
+    # elles, le backtest retombe dans le biais du survivant.
+    tous = set(build_universe())
+    try:
+        from atlas.backtest.pit_data import titres_historiques
+        from atlas.data.store import load_ohlcv
+
+        tous |= {t for t in titres_historiques() if not load_ohlcv(t).empty}
+    except FileNotFoundError:
+        pass    # composition historique pas encore reconstituee
+    univers = sorted(tous)[:limite] if limite else sorted(tous)
     dossier = Path(get_config().cache_dir) / "edgar"
     dossier.mkdir(parents=True, exist_ok=True)
     chemin = dossier / SORTIE
@@ -95,7 +105,7 @@ def main() -> None:
     print(f"  fichier      : {chemin.relative_to(PROJECT_ROOT)}"
           f" ({chemin.stat().st_size / 1024**2:.1f} Mo)")
     print(f"  periode      : {faits.fin.min().date()} -> {faits.fin.max().date()}")
-    print(f"  hors SEC     : {len(hors_sec)} titres (europeens: attendu)")
+    print(f"  hors SEC     : {len(hors_sec)} titres (europeens et radies)")
     if vides:
         print(f"  sans concepts: {len(vides)} ({', '.join(vides[:8])})")
     if echecs:
