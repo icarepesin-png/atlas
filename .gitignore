@@ -9,3 +9,7 @@ atlas.db
 # Le slash initial l'ancre a la racine: n'exclut PAS le package atlas/data/.
 # Les noms de societes vivent dans config/ (versionne) pour le dashboard cloud.
 /data/
+
+# fichiers temporaires SQLite (mode WAL)
+*.db-shm
+*.db-wal
